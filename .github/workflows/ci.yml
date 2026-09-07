@@ -54,3 +54,4 @@ jobs:
             exit 1
           }
           Write-Host "Secret scan passed with 0 findings."
+          exit 0
