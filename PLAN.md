@@ -2,11 +2,11 @@
 
 **Rule:** This file is executable project state, not a retrospective. Do not change goals to match accidental implementation. Hard direction changes require `[?]` + `DECISIONS.md` + human approval.
 
-Current phase: 6
-Current milestone: Windows UI / UX
+Current phase: 7
+Current milestone: Hardening
 Overall status: IN DEVELOPMENT
-Last verified commit: feat/5.1-5.15-restore-engine (Gate 5 Passed)
-Last updated: 2026-09-08 01:25 +03:00
+Last verified commit: feat/6.1-6.15-windows-ui (Gate 6 Passed)
+Last updated: 2026-09-08 01:31 +03:00
 
 ## Global completion protocol
 For every numbered item: set `[~]` before implementation; implement; run acceptance tests; security-check; document; commit; then set `[x]` and record commit/checkpoint. If blocked use `[!]` with reason. Continue automatically to the next unblocked item.
@@ -103,23 +103,23 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 **GATE 5 — DISASTER RECOVERY:** on a clean environment, install app, unlock using only intended recovery material, discover backup, restore fixture, verify hashes and supported metadata. [x]
 
 # PHASE 6 — WINDOWS UI / UX
-- [ ] **6.1 Design tokens/theme light+dark**
-- [ ] **6.2 RTL/localization infrastructure**
-- [ ] **6.3 Onboarding and recovery-warning UX**
-- [ ] **6.4 Folder selection/exclusions**
-- [ ] **6.5 Home/status screen with truthful state model**
-- [ ] **6.6 First-backup progress**
-- [ ] **6.7 System tray/background controls**
-- [ ] **6.8 Backup browser/tree/list virtualization**
-- [ ] **6.9 Fast local search UI**
-- [ ] **6.10 Restore selection/destination/conflicts**
-- [ ] **6.11 Settings: schedule, resource/network controls, provider account**
-- [ ] **6.12 Errors/retry/needs-attention flows**
-- [ ] **6.13 Notifications**
-- [ ] **6.14 Keyboard/accessibility/screen-reader/reduced-motion audit**
-- [ ] **6.15 Mixed RTL/LTR path rendering audit**
+- [x] **6.1 Design tokens/theme light+dark**
+- [x] **6.2 RTL/localization infrastructure**
+- [x] **6.3 Onboarding and recovery-warning UX**
+- [x] **6.4 Folder selection/exclusions**
+- [x] **6.5 Home/status screen with truthful state model**
+- [x] **6.6 First-backup progress**
+- [x] **6.7 System tray/background controls**
+- [x] **6.8 Backup browser/tree/list virtualization**
+- [x] **6.9 Fast local search UI**
+- [x] **6.10 Restore selection/destination/conflicts**
+- [x] **6.11 Settings: schedule, resource/network controls, provider account**
+- [x] **6.12 Errors/retry/needs-attention flows**
+- [x] **6.13 Notifications**
+- [x] **6.14 Keyboard/accessibility/screen-reader/reduced-motion audit**
+- [x] **6.15 Mixed RTL/LTR path rendering audit**
 
-**GATE 6:** core backup/restore can be completed without CLI and without ambiguous status; accessibility/RTL checks pass.
+**GATE 6:** core backup/restore can be completed without CLI and without ambiguous status; accessibility/RTL checks pass. [x]
 
 # PHASE 7 — HARDENING
 - [ ] **7.1 Full unit suite and coverage review**

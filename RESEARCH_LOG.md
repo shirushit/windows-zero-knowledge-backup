@@ -237,7 +237,32 @@ Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet tes
 Security review: Path traversal defenses verified; tampered chunks and wrong recovery keys fatally rejected; temporary files securely cleaned up; memory zeroed on content keys.
 Problems: Cleared SQLite connection pools before database deletion in Gate 5 test fixture.
 Decisions: ManifestPackage introduced with BMAM magic header to facilitate zero-knowledge discovery on clean machines while maintaining cryptographic authenticity via AAD.
-Next: Phase 6 Windows UI / UX (Task 6.1 Design tokens/theme light+dark).
+### 2026-09-08 01:31 +03:00 — Phase 6 Windows UI / UX and Gate 6 Passed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/6.1-6.15-windows-ui
+Commit: pending
+Plan item: Tasks 6.1 through 6.15, GATE 6
+Completed: Implemented full native Windows WPF RTL user interface in BackupApp.UI:
+- Task 6.1: ThemeManager with Light and Dark Fluent design tokens and dynamic resource switching.
+- Task 6.2 & 6.15: RTL localization infrastructure with FlowDirection="RightToLeft" and PathFormatter implementing Unicode Left-to-Right Mark (LRM \u200E) boundaries to prevent mixed Hebrew/English path scrambling.
+- Task 6.3: Onboarding flow with Master Password setup, 256-bit recovery phrase generation, and mandatory confirmation checklist.
+- Task 6.4: Backup source folder list management and exclusion filtering.
+- Task 6.5: Truthful status card indicating current protection state, file counts, storage volume, and timestamp.
+- Task 6.6: Live backup progress tracking with percentage, progress bar, current file, and cancellation support.
+- Task 6.7: System tray integration architecture.
+- Task 6.8 & 6.9: Backup file browser with ListView virtualization, details panel, and instant search filtering.
+- Task 6.10: Restore destination picker, conflict resolution policies (Overwrite, Rename, Skip), and selective restore triggers.
+- Task 6.11: Settings tab covering Telegram bot token & Chat ID with connection verification and backup root controls.
+- Task 6.12 & 6.13: User-facing error messaging, status badges, and feedback flows.
+- Task 6.14: Keyboard accessibility (Alt access keys, tab indexing) and AutomationProperties.Name labels on all interactive controls.
+- GATE 6: Gate6VerificationTests confirming complete end-to-end backup and restore workflow operated purely through UI ViewModel layer (no CLI), truthful status transitions, live search filtering, and verified RTL path formatting.
+Changed: Added PathFormatter.cs, ThemeManager.cs, ViewModelBase.cs, MainViewModel.cs; updated App.xaml, MainWindow.xaml, MainWindow.xaml.cs; added PathFormatterTests.cs, MainViewModelTests.cs, Gate6VerificationTests.cs; updated BackupApp.UnitTests.csproj, PLAN.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (117/117 tests across UnitTests and CryptoTests); `dotnet format --verify-no-changes` passed.
+Security review: Secrets (passwords, Telegram tokens) protected in UI layer; no plaintext logging; DPAPI integration preserved; zero-knowledge encryption maintained.
+Problems: Fixed CA1305 in date formatting and CA1001 IDisposable on MainViewModel; resolved WPF implicit usings in test project.
+Decisions: Used Fluent RTL layout with Left-to-Right Mark wrappers for file system paths to guarantee pristine visual alignment across mixed Hebrew and Latin paths.
+Next: Phase 7 Hardening (Task 7.1 Full unit suite and coverage review).
+
 
 
 
