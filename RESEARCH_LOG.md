@@ -67,6 +67,20 @@ Problems: None.
 Decisions: CI workflow targets windows-latest runner with strict locked restore.
 Next: Task 0.6 Git protections/workflow & Task 0.7 Baseline performance budgets.
 
+### 2026-09-07 22:43 +03:00 — Tasks 0.6 & 0.7 and Gate 0 Foundation Completed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/0.6-0.7-workflow-and-budgets
+Commit: pending
+Plan items: 0.6 Git protections/workflow, 0.7 Baseline performance budgets, Gate 0 Foundation
+Completed: Git workflow protections and local pre-commit hook (.githooks/pre-commit) implemented; PERFORMANCE.md populated with explicit budgets for idle, active scan/hash, upload, UI, and restore; Gate 0 fully passed.
+Changed: Added .githooks/pre-commit; updated GIT_WORKFLOW.md, PERFORMANCE.md, PLAN.md (all Phase 0 items marked [x]).
+Tests/build: `dotnet restore --locked-mode BackupApp.sln` verified; `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed.
+Security review: Pre-commit hook enforces no direct commits to main and scans for private keys and credentials.
+Problems: None.
+Decisions: Local pre-commit hook active via core.hooksPath.
+Next: Phase 1 — Domain + Local Catalog (Task 1.1 Domain models and invariants).
+
+
 
 
 

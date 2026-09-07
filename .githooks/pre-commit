@@ -1,0 +1,17 @@
+#!/bin/sh
+# Pre-commit hook to enforce git workflow and secret prevention
+
+currentBranch=$(git branch --show-current)
+if [ "$currentBranch" = "main" ]; then
+    echo "ERROR: Direct commits to 'main' are forbidden by GIT_WORKFLOW.md and AGENTS.md. Please create a feature branch." >&2
+    exit 1
+fi
+
+# Scan staged changes for potential private keys or tokens (excluding git hooks and workflows that define patterns)
+bannedPatterns="BEGIN RSA PRIVATE KEY|BEGIN OPENSSH PRIVATE KEY|BEGIN PRIVATE KEY"
+if git diff --cached --unified=0 -- . ':(exclude).githooks' ':(exclude).github' | grep -E "$bannedPatterns" >/dev/null 2>&1; then
+    echo "ERROR: Staged diff matches banned secret pattern." >&2
+    exit 1
+fi
+
+exit 0
