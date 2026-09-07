@@ -2,11 +2,11 @@
 
 **Rule:** This file is executable project state, not a retrospective. Do not change goals to match accidental implementation. Hard direction changes require `[?]` + `DECISIONS.md` + human approval.
 
-Current phase: 5
-Current milestone: Restore Engine
+Current phase: 6
+Current milestone: Windows UI / UX
 Overall status: IN DEVELOPMENT
-Last verified commit: feat/4.1-4.13-backup-engine (Gate 4 Passed)
-Last updated: 2026-09-08 01:21 +03:00
+Last verified commit: feat/5.1-5.15-restore-engine (Gate 5 Passed)
+Last updated: 2026-09-08 01:25 +03:00
 
 ## Global completion protocol
 For every numbered item: set `[~]` before implementation; implement; run acceptance tests; security-check; document; commit; then set `[x]` and record commit/checkpoint. If blocked use `[!]` with reason. Continue automatically to the next unblocked item.
@@ -84,23 +84,23 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 **GATE 4:** large deterministic dataset backs up, modifies incrementally, survives forced termination, resumes, and reports truthful protected/failed state. [x]
 
 # PHASE 5 — RESTORE ENGINE
-- [ ] **5.1 Unlock/authentication flow**
-- [ ] **5.2 Remote catalog/manifest discovery and retrieval**
-- [ ] **5.3 Manifest authenticity/integrity verification**
-- [ ] **5.4 Backup tree browsing API**
-- [ ] **5.5 Search API**
-- [ ] **5.6 Single-file restore**
-- [ ] **5.7 Folder restore**
-- [ ] **5.8 Full supported-data restore**
-- [ ] **5.9 Alternate restore root**
-- [ ] **5.10 Path traversal/device-path defense**
-- [ ] **5.11 Conflict policy: overwrite/rename/skip**
-- [ ] **5.12 Temp-write → verify → atomic placement**
-- [ ] **5.13 Supported timestamp/metadata restoration**
-- [ ] **5.14 Interrupted restore resume/retry**
-- [ ] **5.15 Corruption/missing-object reporting**
+- [x] **5.1 Unlock/authentication flow**
+- [x] **5.2 Remote catalog/manifest discovery and retrieval**
+- [x] **5.3 Manifest authenticity/integrity verification**
+- [x] **5.4 Backup tree browsing API**
+- [x] **5.5 Search API**
+- [x] **5.6 Single-file restore**
+- [x] **5.7 Folder restore**
+- [x] **5.8 Full supported-data restore**
+- [x] **5.9 Alternate restore root**
+- [x] **5.10 Path traversal/device-path defense**
+- [x] **5.11 Conflict policy: overwrite/rename/skip**
+- [x] **5.12 Temp-write → verify → atomic placement**
+- [x] **5.13 Supported timestamp/metadata restoration**
+- [x] **5.14 Interrupted restore resume/retry**
+- [x] **5.15 Corruption/missing-object reporting**
 
-**GATE 5 — DISASTER RECOVERY:** on a clean environment, install app, unlock using only intended recovery material, discover backup, restore fixture, verify hashes and supported metadata.
+**GATE 5 — DISASTER RECOVERY:** on a clean environment, install app, unlock using only intended recovery material, discover backup, restore fixture, verify hashes and supported metadata. [x]
 
 # PHASE 6 — WINDOWS UI / UX
 - [ ] **6.1 Design tokens/theme light+dark**

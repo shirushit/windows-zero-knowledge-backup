@@ -212,7 +212,33 @@ Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet tes
 Security review: Zero-knowledge maintained: content chunks and snapshot manifests are encrypted with XChaCha20-Poly1305 before transmission; AAD prevents snapshot splicing/swapping.
 Problems: Fixed Base32 CRC test tampering target to first character to guarantee decoded difference; populated ChunkRefs in SqliteCatalogRepository queries; fixed Progress async race in StorageTests.
 Decisions: Default chunk size set to 8MB; LockedFileHandling defaults to SkipWithWarning; manifest saved as catalog anchor remote object.
-Next: Phase 5 Restore Engine (Task 5.1 Unlock/authentication flow).
+### 2026-09-08 01:25 +03:00 — Phase 5 Restore Engine and Gate 5 (Disaster Recovery) Passed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/5.1-5.15-restore-engine
+Commit: pending
+Plan item: Tasks 5.1 through 5.15, GATE 5 (Disaster Recovery)
+Completed: Implemented complete restore engine subsystem in BackupApp.RestoreEngine:
+- Task 5.1: KeyUnlockService supporting master key unlocking via password (WrappedKeyEnvelope) and offline disaster recovery via recovery phrase (RecoveryKeyService).
+- Task 5.2: RemoteCatalogDiscoveryService enumerating remote catalog anchors and discovering snapshot manifests directly from remote storage without local database.
+- Task 5.3: Authenticated manifest verification via AAD binding (BuildAssociatedData) and ManifestPackage self-describing authenticated format.
+- Task 5.4 & 5.5: RestoreTreeBrowser providing virtual directory hierarchy navigation, immediate child queries, and fast file search across snapshot manifests.
+- Task 5.6: Single-file restore with streaming chunk retrieval, in-memory decryption, SHA256 integrity verification, and atomic placement.
+- Task 5.7 & 5.8: Folder restore and full supported-data snapshot restore with progress reporting.
+- Task 5.9: Alternate destination restore root support.
+- Task 5.10: Path traversal and reserved device defense (ValidateAndResolveTargetPath) strictly enforcing root boundary confinement, rejecting '..' tokens, and blocking Windows reserved device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9).
+- Task 5.11: Conflict resolution policies (Overwrite, RenameExisting with timestamp suffix, Skip).
+- Task 5.12: Temp-write → verify → atomic placement pattern preventing corrupted or incomplete files from corrupting destination.
+- Task 5.13: Supported timestamp and file attribute restoration (CreationTimeUtc, LastWriteTimeUtc, FileAttributes).
+- Task 5.14: Interrupted restore resumption and retry via StorageRetryPolicy.
+- Task 5.15: Corruption, missing-object, and hash-mismatch detection with immediate temp-file cleanup and cryptographic exception propagation.
+- GATE 5: Gate5VerificationTests proving that on a clean environment with the local database destroyed and original master key forgotten, the system unlocks using ONLY the recovery phrase, discovers the remote backup, restores all files (including Hebrew paths and binary payloads) byte-for-byte matching original source hashes and timestamps.
+Changed: Added ManifestPackage to ManifestCryptoService.cs; added IKeyUnlockService.cs, IRemoteCatalogDiscoveryService.cs, RestoreTreeBrowser.cs, IRestoreOrchestrator.cs; added RestoreEngineTests.cs, Gate5VerificationTests.cs; updated BackupApp.UnitTests.csproj, PLAN.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (106/106 tests across UnitTests and CryptoTests); `dotnet format --verify-no-changes` passed.
+Security review: Path traversal defenses verified; tampered chunks and wrong recovery keys fatally rejected; temporary files securely cleaned up; memory zeroed on content keys.
+Problems: Cleared SQLite connection pools before database deletion in Gate 5 test fixture.
+Decisions: ManifestPackage introduced with BMAM magic header to facilitate zero-knowledge discovery on clean machines while maintaining cryptographic authenticity via AAD.
+Next: Phase 6 Windows UI / UX (Task 6.1 Design tokens/theme light+dark).
+
 
 
 

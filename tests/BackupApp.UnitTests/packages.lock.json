@@ -199,6 +199,15 @@
       "backupapp.domain": {
         "type": "Project"
       },
+      "backupapp.restoreengine": {
+        "type": "Project",
+        "dependencies": {
+          "BackupApp.Catalog": "[1.0.0, )",
+          "BackupApp.Crypto": "[1.0.0, )",
+          "BackupApp.Domain": "[1.0.0, )",
+          "BackupApp.Storage": "[1.0.0, )"
+        }
+      },
       "backupapp.storage": {
         "type": "Project",
         "dependencies": {

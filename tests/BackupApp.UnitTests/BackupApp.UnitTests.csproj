@@ -18,5 +18,6 @@
     <ProjectReference Include="..\..\src\BackupApp.Storage.Telegram\BackupApp.Storage.Telegram.csproj" />
     <ProjectReference Include="..\..\src\BackupApp.Crypto\BackupApp.Crypto.csproj" />
     <ProjectReference Include="..\..\src\BackupApp.BackupEngine\BackupApp.BackupEngine.csproj" />
+    <ProjectReference Include="..\..\src\BackupApp.RestoreEngine\BackupApp.RestoreEngine.csproj" />
   </ItemGroup>
 </Project>

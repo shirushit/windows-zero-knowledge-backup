@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -26,11 +27,82 @@ public sealed record SnapshotManifest(
     IReadOnlyList<SnapshotManifestItem> Items
 );
 
+public sealed record ManifestPackage(string BackupSetId, long SnapshotNumber, EncryptedEnvelope Envelope)
+{
+    public const uint MagicHeader = 0x4D414D42; // "BMAM" in little-endian
+    public const byte CurrentVersion = 1;
+
+    public byte[] ToBytes()
+    {
+        var setIdBytes = Encoding.UTF8.GetBytes(BackupSetId);
+        var envelopeBytes = Envelope.ToBytes();
+        var totalLen = 4 + 1 + 2 + setIdBytes.Length + 8 + 4 + envelopeBytes.Length;
+        var buffer = new byte[totalLen];
+        var span = buffer.AsSpan();
+
+        BinaryPrimitives.WriteUInt32LittleEndian(span[..4], MagicHeader);
+        span[4] = CurrentVersion;
+        BinaryPrimitives.WriteUInt16LittleEndian(span.Slice(5, 2), (ushort)setIdBytes.Length);
+        setIdBytes.CopyTo(span.Slice(7, setIdBytes.Length));
+        int offset = 7 + setIdBytes.Length;
+        BinaryPrimitives.WriteInt64LittleEndian(span.Slice(offset, 8), SnapshotNumber);
+        offset += 8;
+        BinaryPrimitives.WriteInt32LittleEndian(span.Slice(offset, 4), envelopeBytes.Length);
+        offset += 4;
+        envelopeBytes.CopyTo(span[offset..]);
+
+        return buffer;
+    }
+
+    public static ManifestPackage FromBytes(ReadOnlySpan<byte> data)
+    {
+        if (data.Length < 4 + 1 + 2 + 8 + 4)
+        {
+            throw new CryptographicException("Manifest package is too short.");
+        }
+
+        var magic = BinaryPrimitives.ReadUInt32LittleEndian(data[..4]);
+        if (magic != MagicHeader)
+        {
+            throw new CryptographicException("Invalid manifest package magic header.");
+        }
+
+        var version = data[4];
+        if (version != CurrentVersion)
+        {
+            throw new CryptographicException($"Unsupported manifest package version {version}.");
+        }
+
+        var setIdLen = BinaryPrimitives.ReadUInt16LittleEndian(data.Slice(5, 2));
+        if (data.Length < 7 + setIdLen + 8 + 4)
+        {
+            throw new CryptographicException("Manifest package data is truncated.");
+        }
+
+        var setId = Encoding.UTF8.GetString(data.Slice(7, setIdLen));
+        int offset = 7 + setIdLen;
+        var snapshotNumber = BinaryPrimitives.ReadInt64LittleEndian(data.Slice(offset, 8));
+        offset += 8;
+        var envelopeLen = BinaryPrimitives.ReadInt32LittleEndian(data.Slice(offset, 4));
+        offset += 4;
+
+        if (data.Length < offset + envelopeLen)
+        {
+            throw new CryptographicException("Manifest package envelope data is truncated.");
+        }
+
+        var envelope = EncryptedEnvelope.FromBytes(data.Slice(offset, envelopeLen));
+        return new ManifestPackage(setId, snapshotNumber, envelope);
+    }
+}
+
 public interface IManifestCryptoService
 {
     EncryptedEnvelope EncryptManifest(SnapshotManifest manifest, MasterKey masterKey);
+    byte[] CreateManifestPackageBytes(SnapshotManifest manifest, MasterKey masterKey);
     SnapshotManifest DecryptManifest(EncryptedEnvelope envelope, MasterKey masterKey, string backupSetId, long snapshotNumber);
     SnapshotManifest DecryptManifest(ReadOnlySpan<byte> envelopeBytes, MasterKey masterKey, string backupSetId, long snapshotNumber);
+    SnapshotManifest DecryptPackage(ReadOnlySpan<byte> packageBytes, MasterKey masterKey, string? fallbackBackupSetId = null, long? fallbackSnapshotNumber = null);
 }
 
 public sealed class ManifestCryptoService : IManifestCryptoService
@@ -93,6 +165,34 @@ public sealed class ManifestCryptoService : IManifestCryptoService
     {
         var envelope = EncryptedEnvelope.FromBytes(envelopeBytes);
         return DecryptManifest(envelope, masterKey, backupSetId, snapshotNumber);
+    }
+
+    public byte[] CreateManifestPackageBytes(SnapshotManifest manifest, MasterKey masterKey)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(masterKey);
+
+        var envelope = EncryptManifest(manifest, masterKey);
+        var pkg = new ManifestPackage(manifest.BackupSetId, manifest.SnapshotNumber, envelope);
+        return pkg.ToBytes();
+    }
+
+    public SnapshotManifest DecryptPackage(ReadOnlySpan<byte> packageBytes, MasterKey masterKey, string? fallbackBackupSetId = null, long? fallbackSnapshotNumber = null)
+    {
+        ArgumentNullException.ThrowIfNull(masterKey);
+
+        if (packageBytes.Length >= 4 && BinaryPrimitives.ReadUInt32LittleEndian(packageBytes[..4]) == ManifestPackage.MagicHeader)
+        {
+            var pkg = ManifestPackage.FromBytes(packageBytes);
+            return DecryptManifest(pkg.Envelope, masterKey, pkg.BackupSetId, pkg.SnapshotNumber);
+        }
+
+        if (fallbackBackupSetId != null && fallbackSnapshotNumber.HasValue)
+        {
+            return DecryptManifest(packageBytes, masterKey, fallbackBackupSetId, fallbackSnapshotNumber.Value);
+        }
+
+        throw new CryptographicException("Cannot decrypt raw envelope without known backupSetId and snapshotNumber for AAD verification.");
     }
 }
 
