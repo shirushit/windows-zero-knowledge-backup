@@ -54,4 +54,5 @@ appsettings*.local.json
 local_test_data/
 scratch/
 artifacts/
+run-ui.bat
 

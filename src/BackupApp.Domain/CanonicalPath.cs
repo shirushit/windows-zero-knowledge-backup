@@ -4,7 +4,7 @@ namespace BackupApp.Domain;
 
 public readonly partial record struct CanonicalPath : IEquatable<CanonicalPath>, IComparable<CanonicalPath>
 {
-    private static readonly char[] IllegalChars = ['<', '>', ':', '"', '|', '?', '*', '\\'];
+    private static readonly System.Buffers.SearchValues<char> IllegalChars = System.Buffers.SearchValues.Create(['<', '>', ':', '"', '|', '?', '*', '\\']);
     private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON", "PRN", "AUX", "NUL",
@@ -48,7 +48,7 @@ public readonly partial record struct CanonicalPath : IEquatable<CanonicalPath>,
                 throw new ArgumentException($"Path traversal segment '{seg}' is forbidden: '{rawPath}'", nameof(rawPath));
             }
 
-            if (seg.IndexOfAny(IllegalChars) >= 0)
+            if (seg.AsSpan().IndexOfAny(IllegalChars) >= 0)
             {
                 throw new ArgumentException($"Path contains illegal characters: '{seg}'", nameof(rawPath));
             }
