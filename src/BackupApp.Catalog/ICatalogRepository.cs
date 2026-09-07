@@ -5,37 +5,38 @@ namespace BackupApp.Catalog;
 public interface ICatalogRepository : IAsyncDisposable
 {
     Task InitializeAsync(CancellationToken cancellationToken = default);
-    Task CommitSnapshotAsync(SnapshotId snapshotId, IEnumerable<FileMetadata> files, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<FileMetadata>> GetSnapshotFilesAsync(SnapshotId snapshotId, CancellationToken cancellationToken = default);
-}
 
-public sealed class SqliteCatalogRepository : ICatalogRepository
-{
-    private readonly string _connectionString;
+    // Backup Sets
+    Task SaveBackupSetAsync(BackupSet backupSet, CancellationToken cancellationToken = default);
+    Task<BackupSet?> GetBackupSetAsync(BackupSetId id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BackupSet>> ListBackupSetsAsync(CancellationToken cancellationToken = default);
 
-    public SqliteCatalogRepository(string databasePath)
-    {
-        _connectionString = $"Data Source={databasePath};Mode=ReadWriteCreate;Cache=Shared";
-    }
+    // Snapshots
+    Task CreateSnapshotAsync(Snapshot snapshot, CancellationToken cancellationToken = default);
+    Task<Snapshot?> GetSnapshotAsync(SnapshotId id, CancellationToken cancellationToken = default);
+    Task<Snapshot?> GetLatestCommittedSnapshotAsync(BackupSetId backupSetId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Snapshot>> ListSnapshotsAsync(BackupSetId backupSetId, CancellationToken cancellationToken = default);
+    Task CommitSnapshotAsync(SnapshotId snapshotId, int totalFiles, long totalBytes, CancellationToken cancellationToken = default);
+    Task MarkSnapshotFailedAsync(SnapshotId snapshotId, string errorMessage, CancellationToken cancellationToken = default);
 
-    public Task InitializeAsync(CancellationToken cancellationToken = default)
-    {
-        // Phase 1 will implement migrations and schema
-        return Task.CompletedTask;
-    }
+    // Files & Versions
+    Task SaveFileEntriesAndVersionsAsync(
+        IEnumerable<FileEntry> entries,
+        IEnumerable<FileVersion> versions,
+        CancellationToken cancellationToken = default
+    );
+    Task<IReadOnlyList<FileVersion>> GetSnapshotFilesAsync(SnapshotId snapshotId, CancellationToken cancellationToken = default);
+    Task<FileVersion?> GetLatestFileVersionAsync(BackupSetId backupSetId, CanonicalPath path, CancellationToken cancellationToken = default);
 
-    public Task CommitSnapshotAsync(SnapshotId snapshotId, IEnumerable<FileMetadata> files, CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException("Catalog transactions will be implemented in Phase 1.");
-    }
+    // Chunks & Remote Refs
+    Task SaveChunksAsync(IEnumerable<StoredChunk> chunks, CancellationToken cancellationToken = default);
+    Task<StoredChunk?> GetChunkAsync(ObjectId id, CancellationToken cancellationToken = default);
+    Task SaveRemoteObjectRefAsync(RemoteObjectRef remoteRef, CancellationToken cancellationToken = default);
+    Task<RemoteObjectRef?> GetRemoteObjectRefAsync(ObjectId objectId, string providerId, CancellationToken cancellationToken = default);
 
-    public Task<IReadOnlyList<FileMetadata>> GetSnapshotFilesAsync(SnapshotId snapshotId, CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException("Catalog retrieval will be implemented in Phase 1.");
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        return ValueTask.CompletedTask;
-    }
+    // Jobs
+    Task SaveBackupJobAsync(BackupJob job, CancellationToken cancellationToken = default);
+    Task<BackupJob?> GetBackupJobAsync(JobId id, CancellationToken cancellationToken = default);
+    Task UpdateBackupJobProgressAsync(JobId id, int processedFiles, long processedBytes, CancellationToken cancellationToken = default);
+    Task CompleteBackupJobAsync(JobId id, JobStatus status, string? errorSummary = null, CancellationToken cancellationToken = default);
 }

@@ -93,6 +93,20 @@ Problems: None.
 Decisions: Implemented IComparable with comparison operators on CanonicalPath to satisfy CA1036.
 Next: Task 1.2 SQLite/catalog schema + migrations.
 
+### 2026-09-08 00:14 +03:00 — Task 1.2 SQLite/catalog schema + migrations completed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/1.2-catalog-schema-migrations
+Commit: pending
+Plan item: 1.2 SQLite/catalog schema + migrations
+Completed: Created SQLite catalog database schema with migrations engine (SchemaMigrator, Migration001InitialSchema). Implemented SqliteCatalogRepository with WAL journal mode, busy timeouts, parameterization, and atomic multi-entity transactions. Added 6 integration tests covering migrations, backup sets, snapshots, file versions, chunks, and jobs.
+Changed: Added src/BackupApp.Catalog/Migrations/ISchemaMigration.cs, Migration001InitialSchema.cs, SchemaMigrator.cs, SqliteCatalogRepository.cs, tests/BackupApp.UnitTests/CatalogRepositoryTests.cs; updated ICatalogRepository.cs, PLAN.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (43/43 tests); `dotnet format --verify-no-changes` passed.
+Security review: SQL injection prevented via parameterization; database file created with secure permissions in local application directory; WAL mode protects ACID consistency against crash/power interruptions.
+Problems: Fixed CA1305 by enforcing CultureInfo.InvariantCulture on date/number parsing; fixed CA1816 with GC.SuppressFinalize in tests.
+Decisions: Used PRAGMA journal_mode = WAL and PRAGMA foreign_keys = ON by default for high concurrency and referential integrity.
+Next: Task 1.3 Canonical internal path model (already foundational via CanonicalPath) & Task 1.4 File discovery with exclusions.
+
+
 
 
 
