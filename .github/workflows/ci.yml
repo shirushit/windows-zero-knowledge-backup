@@ -44,7 +44,7 @@ jobs:
           $bannedPatterns = @("BEGIN RSA PRIVATE KEY", "BEGIN OPENSSH PRIVATE KEY", "BEGIN PRIVATE KEY", "password\s*=\s*['`"][^'`"]+['`"]")
           $foundSecrets = $false
           foreach ($pattern in $bannedPatterns) {
-            $matches = git grep -I -E "$pattern" -- ':(exclude).github/workflows/*'
+            $matches = git grep -I -E "$pattern" -- ':(exclude).github/workflows/*' ':(exclude).githooks/*'
             if ($matches) {
               Write-Error "Found potential secret matching '$pattern': $matches"
               $foundSecrets = $true
