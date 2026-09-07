@@ -25,8 +25,8 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 # PHASE 1 — DOMAIN + LOCAL CATALOG
 - [x] **1.1 Domain models and invariants**
 - [x] **1.2 SQLite/catalog schema + migrations**
-- [ ] **1.3 Canonical internal path model**
-- [ ] **1.4 File discovery with exclusions**
+- [x] **1.3 Canonical internal path model**
+- [x] **1.4 File discovery with exclusions**
 - [ ] **1.5 Metadata capture and stable-read detection**
 - [ ] **1.6 Content hashing streaming implementation**
 - [ ] **1.7 Change detection: new/changed/unchanged/deleted/renamed policy**

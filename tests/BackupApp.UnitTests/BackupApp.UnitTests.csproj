@@ -15,5 +15,6 @@
     <ProjectReference Include="..\..\src\BackupApp.Domain\BackupApp.Domain.csproj" />
     <ProjectReference Include="..\..\src\BackupApp.Catalog\BackupApp.Catalog.csproj" />
     <ProjectReference Include="..\..\src\BackupApp.Storage\BackupApp.Storage.csproj" />
+    <ProjectReference Include="..\..\src\BackupApp.BackupEngine\BackupApp.BackupEngine.csproj" />
   </ItemGroup>
 </Project>

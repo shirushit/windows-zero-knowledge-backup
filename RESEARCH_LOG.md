@@ -106,6 +106,20 @@ Problems: Fixed CA1305 by enforcing CultureInfo.InvariantCulture on date/number 
 Decisions: Used PRAGMA journal_mode = WAL and PRAGMA foreign_keys = ON by default for high concurrency and referential integrity.
 Next: Task 1.3 Canonical internal path model (already foundational via CanonicalPath) & Task 1.4 File discovery with exclusions.
 
+### 2026-09-08 00:19 +03:00 — Tasks 1.3 & 1.4 Path Model & File Discovery with Exclusions completed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/1.3-1.4-path-discovery
+Commit: pending
+Plan items: 1.3 Canonical internal path model, 1.4 File discovery with exclusions
+Completed: Implemented PathNormalizer for converting OS paths to CanonicalPath; implemented ExclusionFilter supporting glob patterns (*, **), exact file names, and directory-level exclusions; implemented resilient asynchronous FileDiscoveryScanner that skips reparse points/symlinks by default and safely handles access exceptions. Added 6 unit tests covering exclusions, traversal, and Hebrew paths.
+Changed: Added src/BackupApp.Domain/PathNormalizer.cs, src/BackupApp.BackupEngine/Scanner/DiscoveredFile.cs, ExclusionFilter.cs, FileDiscoveryScanner.cs, tests/BackupApp.UnitTests/FileDiscoveryScannerTests.cs; updated BackupApp.UnitTests.csproj, PLAN.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (49/49 tests); `dotnet format --verify-no-changes` passed.
+Security review: PathNormalizer enforces root boundary confinement; FileDiscoveryScanner ignores reparse points / symlinks preventing traversal out of scope or cyclic symlink attacks.
+Problems: None.
+Decisions: Excluded directory recursion occurs immediately at directory evaluation time to avoid unnecessary disk I/O on large ignored trees (like node_modules).
+Next: Task 1.5 Metadata capture and stable-read detection & Task 1.6 Content hashing streaming implementation.
+
+
 
 
 
