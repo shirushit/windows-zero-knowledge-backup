@@ -10,6 +10,7 @@
     <ProjectReference Include="..\BackupApp.Catalog\BackupApp.Catalog.csproj" />
     <ProjectReference Include="..\BackupApp.Crypto\BackupApp.Crypto.csproj" />
     <ProjectReference Include="..\BackupApp.Storage\BackupApp.Storage.csproj" />
+    <ProjectReference Include="..\BackupApp.Storage.Telegram\BackupApp.Storage.Telegram.csproj" />
     <ProjectReference Include="..\BackupApp.BackupEngine\BackupApp.BackupEngine.csproj" />
     <ProjectReference Include="..\BackupApp.RestoreEngine\BackupApp.RestoreEngine.csproj" />
     <ProjectReference Include="..\BackupApp.Scheduler\BackupApp.Scheduler.csproj" />

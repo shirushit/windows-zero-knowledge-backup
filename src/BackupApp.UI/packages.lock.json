@@ -106,6 +106,13 @@
           "BackupApp.Domain": "[1.0.0, )"
         }
       },
+      "backupapp.storage.telegram": {
+        "type": "Project",
+        "dependencies": {
+          "BackupApp.Domain": "[1.0.0, )",
+          "BackupApp.Storage": "[1.0.0, )"
+        }
+      },
       "Microsoft.Data.Sqlite": {
         "type": "CentralTransitive",
         "requested": "[8.0.8, )",

@@ -80,6 +80,11 @@ public sealed class AsyncRelayCommand : ICommand
 
     public async void Execute(object? parameter)
     {
+        await ExecuteAsync(parameter).ConfigureAwait(true);
+    }
+
+    public async Task ExecuteAsync(object? parameter = null)
+    {
         if (!CanExecute(parameter))
         {
             return;

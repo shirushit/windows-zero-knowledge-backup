@@ -245,7 +245,8 @@
           "BackupApp.Platform.Windows": "[1.0.0, )",
           "BackupApp.RestoreEngine": "[1.0.0, )",
           "BackupApp.Scheduler": "[1.0.0, )",
-          "BackupApp.Storage": "[1.0.0, )"
+          "BackupApp.Storage": "[1.0.0, )",
+          "BackupApp.Storage.Telegram": "[1.0.0, )"
         }
       },
       "Microsoft.Data.Sqlite": {

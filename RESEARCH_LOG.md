@@ -303,6 +303,24 @@ Problems: Fixed CRLF line ending formatting across newly added tests.
 Decisions: Retained standalone single-file binary distribution with PowerShell installer for native Windows execution without external dependencies.
 Next: Final review, merge to main, and project completion.
 
+### 2026-09-08 02:35 +03:00 — UI Telegram Real Connection & DPAPI Credential Persistence
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/ui-telegram-real-connection
+Commit: pending
+Plan item: UI Settings Integration, Telegram Real Connection, Credential Security
+Completed:
+- Implemented CredentialStoreService with Windows DPAPI encryption (ICredentialStoreService) to safely store and load Telegram credentials (BotToken and ChatId) under %LOCALAPPDATA%\BackupApp\credentials.dat.
+- Connected TelegramStorageAdapter directly into BackupApp.UI and wired TestTelegramConnectionAsync to perform live Telegram Bot API validation (ValidateConnectionAsync: getMe and getChat).
+- Implemented automatic credential saving upon successful validation and automated loading during MainViewModel.InitializeAsync.
+- Added ExecuteAsync to AsyncRelayCommand to enable seamless asynchronous command testing.
+- Created comprehensive unit tests in CredentialStoreServiceTests (encryption roundtrip, clear, error handling) and MainViewModelTests (empty inputs, successful validation & storage switch, automatic credential loading).
+Changed: src/BackupApp.UI/BackupApp.UI.csproj, src/BackupApp.UI/Services/CredentialStoreService.cs, src/BackupApp.UI/ViewModels/MainViewModel.cs, src/BackupApp.UI/ViewModels/ViewModelBase.cs, tests/BackupApp.UnitTests/CredentialStoreServiceTests.cs, tests/BackupApp.UnitTests/MainViewModelTests.cs, RESEARCH_LOG.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (137/137 tests passed across UnitTests and CryptoTests); `dotnet format --verify-no-changes` passed.
+Security review: Bot tokens and chat IDs are encrypted using Windows DPAPI (CurrentUser) before writing to disk; zero secrets logged or committed; token redaction preserved.
+Problems: Resolved line endings with dotnet format.
+Decisions: Used DPAPI for local credential protection with graceful fallback and clear Hebrew status reporting.
+Next: Merge to main and push to GitHub origin.
+
 
 
 

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Windows.Input;
 using BackupApp.BackupEngine;
@@ -9,6 +10,7 @@ using BackupApp.Crypto;
 using BackupApp.Domain;
 using BackupApp.RestoreEngine;
 using BackupApp.Storage;
+using BackupApp.Storage.Telegram;
 using BackupApp.UI.Services;
 
 namespace BackupApp.UI.ViewModels;
@@ -259,19 +261,27 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly List<FileItemViewModel> _allManifestFiles = [];
     private SnapshotManifest? _latestManifest;
     private MasterKey? _unlockedMasterKey;
-    private readonly IStorageProvider _storageProvider;
+    private IStorageProvider _storageProvider;
     private readonly ICatalogRepository _catalogRepository;
     private readonly IBackupOrchestrator _backupOrchestrator;
     private readonly IRestoreOrchestrator _restoreOrchestrator;
     private readonly IRemoteCatalogDiscoveryService _discoveryService;
+    private readonly ICredentialStoreService _credentialStoreService;
+    private readonly Func<TelegramStorageConfiguration, IStorageProvider> _storageFactory;
+
+    public IStorageProvider StorageProvider => _storageProvider;
 
     public MainViewModel(
         IStorageProvider? storageProvider = null,
         ICatalogRepository? catalogRepository = null,
         IBackupOrchestrator? backupOrchestrator = null,
         IRestoreOrchestrator? restoreOrchestrator = null,
-        IRemoteCatalogDiscoveryService? discoveryService = null)
+        IRemoteCatalogDiscoveryService? discoveryService = null,
+        ICredentialStoreService? credentialStoreService = null,
+        Func<TelegramStorageConfiguration, IStorageProvider>? storageFactory = null)
     {
+        _credentialStoreService = credentialStoreService ?? new CredentialStoreService();
+        _storageFactory = storageFactory ?? (config => new TelegramStorageAdapter(config));
         _storageProvider = storageProvider ?? new InMemoryStorageProvider();
         _catalogRepository = catalogRepository ?? new SqliteCatalogRepository(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "catalog.sqlite"));
         _backupOrchestrator = backupOrchestrator ?? new BackupOrchestrator();
@@ -297,6 +307,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public async Task InitializeAsync()
     {
         await _catalogRepository.InitializeAsync().ConfigureAwait(true);
+
+        // Load saved Telegram credentials if present
+        var savedCreds = _credentialStoreService.LoadTelegramCredentials();
+        if (savedCreds != null && !string.IsNullOrWhiteSpace(savedCreds.BotToken) && !string.IsNullOrWhiteSpace(savedCreds.ChatId))
+        {
+            TelegramBotToken = savedCreds.BotToken;
+            TelegramChatId = savedCreds.ChatId;
+            var config = new TelegramStorageConfiguration(savedCreds.BotToken, savedCreds.ChatId);
+            _storageProvider = _storageFactory(config);
+            SettingsStatusMessage = "פרטי החיבור לטלגרם נטענו בהצלחה.";
+        }
 
         // Ensure master key is initialized
         if (_unlockedMasterKey == null)
@@ -516,8 +537,36 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
 
         SettingsStatusMessage = "בודק חיבור מול טלגרם...";
-        await Task.Delay(300); // UI simulation feedback
-        SettingsStatusMessage = "חיבור טלגרם אומת בהצלחה!";
+        try
+        {
+            var config = new TelegramStorageConfiguration(TelegramBotToken.Trim(), TelegramChatId.Trim());
+            var provider = _storageFactory(config);
+            if (provider is TelegramStorageAdapter adapter)
+            {
+                await adapter.ValidateConnectionAsync().ConfigureAwait(true);
+            }
+            else
+            {
+                await provider.GetCapabilitiesAsync().ConfigureAwait(true);
+            }
+
+            _storageProvider = provider;
+            _credentialStoreService.SaveTelegramCredentials(new TelegramCredentials(TelegramBotToken.Trim(), TelegramChatId.Trim()));
+
+            SettingsStatusMessage = "חיבור טלגרם אומת בהצלחה והוגדר כאחסון הראשי!";
+        }
+        catch (ProviderAuthenticationException paEx)
+        {
+            SettingsStatusMessage = $"שגיאת אימות מול טלגרם: {paEx.Message}";
+        }
+        catch (HttpRequestException httpEx)
+        {
+            SettingsStatusMessage = $"שגיאת תקשורת עם טלגרם: {httpEx.Message}";
+        }
+        catch (Exception ex)
+        {
+            SettingsStatusMessage = $"שגיאה בבדיקת חיבור: {ex.Message}";
+        }
     }
 
     private void ToggleTheme()
