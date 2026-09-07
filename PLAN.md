@@ -2,11 +2,11 @@
 
 **Rule:** This file is executable project state, not a retrospective. Do not change goals to match accidental implementation. Hard direction changes require `[?]` + `DECISIONS.md` + human approval.
 
-Current phase: 1
-Current milestone: Domain + Local Catalog
+Current phase: 2
+Current milestone: Cryptographic Foundation
 Overall status: IN DEVELOPMENT
-Last verified commit: 5cdee32 (Gate 0 Passed)
-Last updated: 2026-09-07 22:45 +03:00
+Last verified commit: (Gate 1 Passed)
+Last updated: 2026-09-08 00:30 +03:00
 
 ## Global completion protocol
 For every numbered item: set `[~]` before implementation; implement; run acceptance tests; security-check; document; commit; then set `[x]` and record commit/checkpoint. If blocked use `[!]` with reason. Continue automatically to the next unblocked item.
@@ -29,10 +29,10 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 - [x] **1.4 File discovery with exclusions**
 - [x] **1.5 Metadata capture and stable-read detection**
 - [x] **1.6 Content hashing streaming implementation**
-- [ ] **1.7 Change detection: new/changed/unchanged/deleted/renamed policy**
-- [ ] **1.8 Snapshot/version state machine**
-- [ ] **1.9 Persistent resumable job model**
-- [ ] **1.10 Local search indexes**
+- [x] **1.7 Change detection: new/changed/unchanged/deleted/renamed policy**
+- [x] **1.8 Snapshot/version state machine**
+- [x] **1.9 Persistent resumable job model**
+- [x] **1.10 Local search indexes**
 
 **GATE 1:** deterministic fixture scan twice yields correct incremental delta; crash/restart leaves catalog consistent.
 

@@ -382,6 +382,62 @@ public sealed class SqliteCatalogRepository : ICatalogRepository
         return new FileVersion(id, entryId, snapId, canonicalPath, size, created, modified, hash, attr, []);
     }
 
+    public async Task<IReadOnlyList<FileVersion>> SearchFilesAsync(
+        BackupSetId backupSetId,
+        string searchTerm,
+        SnapshotId? snapshotId = null,
+        int maxResults = 100,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(searchTerm);
+
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        using var command = connection.CreateCommand();
+
+        var sql = """
+            SELECT v.id, v.file_entry_id, v.snapshot_id, v.path, v.size_bytes, v.created_at, v.modified_at, v.content_hash, v.attributes
+            FROM file_versions v
+            INNER JOIN snapshots s ON v.snapshot_id = s.id
+            WHERE s.backup_set_id = @setId AND s.status = @committed
+              AND v.path LIKE @term ESCAPE '\'
+        """;
+
+        if (snapshotId.HasValue)
+        {
+            sql += " AND v.snapshot_id = @snapId";
+            command.Parameters.AddWithValue("@snapId", snapshotId.Value.ToString());
+        }
+
+        sql += " ORDER BY v.path ASC LIMIT @limit;";
+
+        command.CommandText = sql;
+        command.Parameters.AddWithValue("@setId", backupSetId.ToString());
+        command.Parameters.AddWithValue("@committed", (int)SnapshotStatus.Committed);
+
+        var escaped = searchTerm.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_");
+        command.Parameters.AddWithValue("@term", $"%{escaped}%");
+        command.Parameters.AddWithValue("@limit", maxResults);
+
+        var list = new List<FileVersion>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var id = new FileVersionId(Guid.Parse(reader.GetString(0)));
+            var entryId = new FileEntryId(Guid.Parse(reader.GetString(1)));
+            var snapId = new SnapshotId(Guid.Parse(reader.GetString(2)));
+            var canonicalPath = CanonicalPath.From(reader.GetString(3));
+            var size = reader.GetInt64(4);
+            var created = DateTimeOffset.Parse(reader.GetString(5), CultureInfo.InvariantCulture);
+            var modified = DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture);
+            var hash = reader.GetString(7);
+            var attr = (FileEntryAttributes)reader.GetInt32(8);
+
+            list.Add(new FileVersion(id, entryId, snapId, canonicalPath, size, created, modified, hash, attr, []));
+        }
+
+        return list;
+    }
+
     public async Task SaveChunksAsync(IEnumerable<StoredChunk> chunks, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
