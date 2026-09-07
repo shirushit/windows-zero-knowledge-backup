@@ -5,6 +5,8 @@ using BackupApp.Crypto;
 using BackupApp.Domain;
 using BackupApp.RestoreEngine;
 using BackupApp.Storage;
+using BackupApp.Storage.Telegram;
+using BackupApp.UI.Services;
 using BackupApp.UI.ViewModels;
 using FluentAssertions;
 using Xunit;
@@ -139,5 +141,70 @@ public class MainViewModelTests : IDisposable
 
         vm.RemoveFolderCommand.Execute(@"C:\TestFolder");
         vm.IncludedRoots.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MainViewModel_TestTelegramConnection_WhenEmpty_ShouldSetWarningMessage()
+    {
+        using var vm = new MainViewModel();
+        vm.TelegramBotToken = "";
+        vm.TelegramChatId = "";
+
+        await ((AsyncRelayCommand)vm.TestTelegramConnectionCommand).ExecuteAsync(null);
+
+        vm.SettingsStatusMessage.Should().Contain("אנא הזן");
+    }
+
+    [Fact]
+    public async Task MainViewModel_TestTelegramConnection_WhenSuccessful_ShouldSaveCredentialsAndSwitchStorage()
+    {
+        var credDir = Path.Combine(_testRoot, "creds");
+        Directory.CreateDirectory(credDir);
+        var credPath = Path.Combine(credDir, "credentials.dat");
+        var credService = new CredentialStoreService(credPath);
+
+        var mockStorage = new InMemoryStorageProvider();
+        using var vm = new MainViewModel(
+            storageProvider: new InMemoryStorageProvider(),
+            catalogRepository: new SqliteCatalogRepository(_catalogDbPath),
+            credentialStoreService: credService,
+            storageFactory: _ => mockStorage);
+
+        vm.TelegramBotToken = "12345:TOKEN";
+        vm.TelegramChatId = "-99999";
+
+        await ((AsyncRelayCommand)vm.TestTelegramConnectionCommand).ExecuteAsync(null);
+
+        vm.SettingsStatusMessage.Should().Contain("אומת בהצלחה");
+        vm.StorageProvider.Should().BeSameAs(mockStorage);
+
+        var saved = credService.LoadTelegramCredentials();
+        saved.Should().NotBeNull();
+        saved!.BotToken.Should().Be("12345:TOKEN");
+        saved.ChatId.Should().Be("-99999");
+    }
+
+    [Fact]
+    public async Task MainViewModel_InitializeAsync_WhenCredentialsExist_ShouldAutoLoad()
+    {
+        var credDir = Path.Combine(_testRoot, "creds_autoload");
+        Directory.CreateDirectory(credDir);
+        var credPath = Path.Combine(credDir, "credentials.dat");
+        var credService = new CredentialStoreService(credPath);
+        credService.SaveTelegramCredentials(new TelegramCredentials("SAVED_TOKEN", "SAVED_CHAT"));
+
+        var mockStorage = new InMemoryStorageProvider();
+        using var vm = new MainViewModel(
+            storageProvider: new InMemoryStorageProvider(),
+            catalogRepository: new SqliteCatalogRepository(_catalogDbPath),
+            credentialStoreService: credService,
+            storageFactory: _ => mockStorage);
+
+        await vm.InitializeAsync();
+
+        vm.TelegramBotToken.Should().Be("SAVED_TOKEN");
+        vm.TelegramChatId.Should().Be("SAVED_CHAT");
+        vm.StorageProvider.Should().BeSameAs(mockStorage);
+        vm.SettingsStatusMessage.Should().Contain("נטענו בהצלחה");
     }
 }
