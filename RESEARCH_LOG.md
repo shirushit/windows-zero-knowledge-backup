@@ -148,7 +148,7 @@ Next: Phase 2 Cryptographic Foundation (Task 2.1 Select maintained crypto librar
 ### 2026-09-08 01:10 +03:00 — Phase 2 Cryptographic Foundation and Gate 2 Passed
 Agent/model: Gemini 3.8 Flash (Antigravity)
 Branch: feat/2.1-crypto-library-primitives
-Commit: pending
+Commit: 13374f9 (merged in 37d220a)
 Plan items: Tasks 2.1 through 2.10, GATE 2
 Completed: Implemented full cryptographic subsystem in BackupApp.Crypto:
 - Task 2.1: DEC-003 recorded selecting XChaCha20-Poly1305, Argon2id, HKDF-SHA256, and DPAPI.
@@ -167,6 +167,28 @@ Security review: Zero-knowledge confidentiality and authenticity guaranteed; non
 Problems: Discovered Argon2Parameters MemorySize is in KiB per RFC 9106; calibrated 65536 KiB (64MB) to achieve ~70-100ms execution.
 Decisions: DEC-003 approved; XChaCha20-Poly1305 selected for collision-free random nonces.
 Next: Phase 3 Storage Abstraction + Telegram MVP (Task 3.1 Provider-neutral StorageProvider interface).
+
+### 2026-09-08 01:15 +03:00 — Phase 3 Storage Abstraction, Telegram MVP, and Gate 3 Passed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/3.1-3.6-storage-abstraction-telegram
+Commit: pending
+Plan items: Tasks 3.1 through 3.12, GATE 3
+Completed: Implemented storage subsystem and Telegram adapter:
+- Task 3.1: Provider-neutral IStorageProvider interface with streaming, progress reporting, capabilities discovery, and deletion.
+- Task 3.2: InMemoryStorageProvider simulating latencies, transient failures, disconnection, and deterministic streaming.
+- Task 3.3 & 3.4: TelegramStorageConfiguration with secret redaction; capabilities reporting 20MB safe chunk size and 8MB recommended chunk size.
+- Task 3.5: Streaming upload (sendDocument) and download (getFile + file stream) with SHA256 progress tracking.
+- Task 3.6: UploadQueueService with durable JSON state, retry tracking, and stale item recovery on crash/restart.
+- Task 3.7: StorageRetryPolicy with exponential backoff, jitter, and HTTP 429 Retry-After handling.
+- Task 3.8 & 3.9: Provider-independent RemoteObjectDescriptor mapping internal ObjectIds to remote references.
+- Task 3.10 & 3.11: Error handling detecting HTTP 401/403 invalid/revoked tokens and throwing ProviderAuthenticationException.
+- Task 3.12 & GATE 3: Gate3VerificationTests verifying that encrypted objects survive simulated transient failure (2 failures per object), retry through StorageRetryPolicy, durable queue recovery, remote download, and decrypt byte-for-byte identical to original fixtures.
+Changed: Added InMemoryStorageProvider.cs, StorageRetryPolicy.cs, UploadQueueService.cs, TelegramStorageConfiguration.cs; updated IStorageProvider.cs, TelegramStorageAdapter.cs; added StorageTests.cs, TelegramStorageTests.cs, Gate3VerificationTests.cs; updated BackupApp.UnitTests.csproj, PLAN.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (92/92 tests across UnitTests and CryptoTests); `dotnet format --verify-no-changes` passed.
+Security review: Secrets redacted in configuration ToString(); encrypted objects verified byte-for-byte without leaking plaintext; TLS verification maintained; tokens stored securely via DPAPI.
+Problems: None.
+Decisions: Telegram chunk limit set to 20MB safe boundary with 8MB default chunks; exponential backoff capped at 30s with 20% jitter.
+Next: Phase 4 Backup Engine (Task 4.1 Initial backup orchestration).
 
 
 
