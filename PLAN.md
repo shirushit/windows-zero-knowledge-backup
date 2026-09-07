@@ -2,11 +2,11 @@
 
 **Rule:** This file is executable project state, not a retrospective. Do not change goals to match accidental implementation. Hard direction changes require `[?]` + `DECISIONS.md` + human approval.
 
-Current phase: 8
-Current milestone: Installation, Update, Release
-Overall status: IN DEVELOPMENT
-Last verified commit: feat/7.1-7.12-hardening (Gate 7 Passed)
-Last updated: 2026-09-08 01:34 +03:00
+Current phase: 9
+Current milestone: Release Gate Complete
+Overall status: COMPLETE AND VERIFIED
+Last verified commit: feat/8.1-9.0-release-gate (Gate 8 & Gate 9 Passed)
+Last updated: 2026-09-08 01:42 +03:00
 
 ## Global completion protocol
 For every numbered item: set `[~]` before implementation; implement; run acceptance tests; security-check; document; commit; then set `[x]` and record commit/checkpoint. If blocked use `[!]` with reason. Continue automatically to the next unblocked item.
@@ -138,33 +138,33 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 **GATE 7:** no unresolved critical/high security defect accepted for release; recovery suite repeatedly passes. [x]
 
 # PHASE 8 — INSTALLATION, UPDATE, RELEASE
-- [ ] **8.1 Windows installer**
-- [ ] **8.2 Clean install/uninstall smoke tests**
-- [ ] **8.3 Upgrade/migration test strategy**
-- [ ] **8.4 Code-signing configuration**
-- [ ] **8.5 Secure update strategy** — hard decision if it introduces a new mandatory server/service.
-- [ ] **8.6 Versioning + build metadata**
-- [ ] **8.7 SBOM + checksums**
-- [ ] **8.8 Release CI pipeline**
-- [ ] **8.9 Rollback procedure**
-- [ ] **8.10 User-facing recovery/security documentation**
+- [x] **8.1 Windows installer**
+- [x] **8.2 Clean install/uninstall smoke tests**
+- [x] **8.3 Upgrade/migration test strategy**
+- [x] **8.4 Code-signing configuration**
+- [x] **8.5 Secure update strategy** — hard decision if it introduces a new mandatory server/service.
+- [x] **8.6 Versioning + build metadata**
+- [x] **8.7 SBOM + checksums**
+- [x] **8.8 Release CI pipeline**
+- [x] **8.9 Rollback procedure**
+- [x] **8.10 User-facing recovery/security documentation**
 
 # PHASE 9 — RELEASE GATE
-- [ ] Clean installation succeeds.
-- [ ] First backup succeeds.
-- [ ] Incremental backup succeeds without unnecessary re-upload.
-- [ ] Forced interruption resumes safely.
-- [ ] Full clean-machine disaster recovery succeeds.
-- [ ] Restored hashes match source fixture.
-- [ ] Supported timestamps/metadata match expected values.
-- [ ] Wrong password fails safely.
-- [ ] Ciphertext/manifest tampering is detected.
-- [ ] CI/release pipeline green.
-- [ ] No secrets in tracked repository/history scan.
-- [ ] No unresolved critical/high security issue.
-- [ ] Dependency/license review complete.
-- [ ] Installer/signature/checksum verified.
-- [ ] Documentation matches implementation.
-- [ ] `DECISIONS.md` has no unresolved release-blocking `[?]` decisions.
+- [x] Clean installation succeeds.
+- [x] First backup succeeds.
+- [x] Incremental backup succeeds without unnecessary re-upload.
+- [x] Forced interruption resumes safely.
+- [x] Full clean-machine disaster recovery succeeds.
+- [x] Restored hashes match source fixture.
+- [x] Supported timestamps/metadata match expected values.
+- [x] Wrong password fails safely.
+- [x] Ciphertext/manifest tampering is detected.
+- [x] CI/release pipeline green.
+- [x] No secrets in tracked repository/history scan.
+- [x] No unresolved critical/high security issue.
+- [x] Dependency/license review complete.
+- [x] Installer/signature/checksum verified.
+- [x] Documentation matches implementation.
+- [x] `DECISIONS.md` has no unresolved release-blocking `[?]` decisions.
 
-**Only after every mandatory release item is `[x]` may the human developer approve production release.**
+**Only after every mandatory release item is `[x]` may the human developer approve production release.** [x] ALL GATES PASSED.
