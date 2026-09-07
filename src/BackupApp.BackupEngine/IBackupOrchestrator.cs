@@ -348,8 +348,7 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
                 Items: manifestItems
             );
 
-            var manifestEnvelope = _manifestCrypto.EncryptManifest(manifest, masterKey);
-            var manifestBytes = manifestEnvelope.ToBytes();
+            var manifestBytes = _manifestCrypto.CreateManifestPackageBytes(manifest, masterKey);
             var manifestObjectId = ObjectId.FromHex(Convert.ToHexString(SHA256.HashData(manifestBytes)));
 
             using var manifestStream = new MemoryStream(manifestBytes);
