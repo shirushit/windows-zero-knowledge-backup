@@ -23,7 +23,7 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 **GATE 0:** clean clone → dependency restore → build → tests/CI succeeds.
 
 # PHASE 1 — DOMAIN + LOCAL CATALOG
-- [ ] **1.1 Domain models and invariants**
+- [x] **1.1 Domain models and invariants**
 - [ ] **1.2 SQLite/catalog schema + migrations**
 - [ ] **1.3 Canonical internal path model**
 - [ ] **1.4 File discovery with exclusions**

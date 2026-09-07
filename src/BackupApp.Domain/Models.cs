@@ -1,17 +1,5 @@
 namespace BackupApp.Domain;
 
-public readonly record struct SnapshotId(Guid Value)
-{
-    public static SnapshotId New() => new(Guid.NewGuid());
-    public override string ToString() => Value.ToString("N");
-}
-
-public readonly record struct ObjectId(string Value)
-{
-    public static ObjectId FromHex(string hex) => new(hex);
-    public override string ToString() => Value;
-}
-
 public enum BackupStatus
 {
     NotStarted,
@@ -25,9 +13,9 @@ public enum BackupStatus
 }
 
 public record FileMetadata(
-    string RelativePath,
+    CanonicalPath RelativePath,
     long SizeBytes,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset ModifiedAt,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset ModifiedUtc,
     string ContentHashSha256
 );

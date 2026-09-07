@@ -80,6 +80,20 @@ Problems: None.
 Decisions: Local pre-commit hook active via core.hooksPath.
 Next: Phase 1 — Domain + Local Catalog (Task 1.1 Domain models and invariants).
 
+### 2026-09-07 22:51 +03:00 — Task 1.1 Domain models and invariants completed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/1.1-domain-models
+Commit: pending
+Plan item: 1.1 Domain models and invariants
+Completed: Defined strongly-typed domain identifiers (SnapshotId, ObjectId, BackupSetId, FileEntryId, FileVersionId, JobId); CanonicalPath with path-traversal prevention, character filtering, and Windows reserved device rejection; core domain entities (BackupSet, Snapshot, FileEntry, FileVersion, StoredChunk, RemoteObjectRef, BackupJob, RestoreJob, ProviderAccount). Added 37 comprehensive unit tests.
+Changed: Added src/BackupApp.Domain/Identifiers.cs, CanonicalPath.cs, Entities.cs, tests/BackupApp.UnitTests/CanonicalPathTests.cs; updated Models.cs, DomainModelTests.cs, PLAN.md.
+Tests/build: `dotnet build -c Release` clean; `dotnet test -c Release` passed (39/39 tests passed); `dotnet format` clean.
+Security review: Path traversal defenses verified (cannot escape base path, no dot-dot navigation, no reserved device names); strongly-typed IDs prevent parameter confusion.
+Problems: None.
+Decisions: Implemented IComparable with comparison operators on CanonicalPath to satisfy CA1036.
+Next: Task 1.2 SQLite/catalog schema + migrations.
+
+
 
 
 
