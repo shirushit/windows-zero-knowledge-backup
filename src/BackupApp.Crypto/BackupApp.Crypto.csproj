@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>BackupApp.Crypto</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NSec.Cryptography" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BackupApp.Domain\BackupApp.Domain.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>BackupApp.BackupEngine</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BackupApp.Domain\BackupApp.Domain.csproj" />
+    <ProjectReference Include="..\BackupApp.Catalog\BackupApp.Catalog.csproj" />
+    <ProjectReference Include="..\BackupApp.Crypto\BackupApp.Crypto.csproj" />
+    <ProjectReference Include="..\BackupApp.Storage\BackupApp.Storage.csproj" />
+  </ItemGroup>
+</Project>

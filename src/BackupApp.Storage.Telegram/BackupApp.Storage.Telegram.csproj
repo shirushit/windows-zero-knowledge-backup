@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>BackupApp.Storage.Telegram</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BackupApp.Storage\BackupApp.Storage.csproj" />
+    <ProjectReference Include="..\BackupApp.Domain\BackupApp.Domain.csproj" />
+  </ItemGroup>
+</Project>

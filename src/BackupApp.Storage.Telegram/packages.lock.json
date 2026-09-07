@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net8.0": {
+      "backupapp.domain": {
+        "type": "Project"
+      },
+      "backupapp.storage": {
+        "type": "Project",
+        "dependencies": {
+          "BackupApp.Domain": "[1.0.0, )"
+        }
+      }
+    }
+  }
+}

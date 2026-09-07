@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>BackupApp.UI</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BackupApp.Domain\BackupApp.Domain.csproj" />
+    <ProjectReference Include="..\BackupApp.Catalog\BackupApp.Catalog.csproj" />
+    <ProjectReference Include="..\BackupApp.Crypto\BackupApp.Crypto.csproj" />
+    <ProjectReference Include="..\BackupApp.Storage\BackupApp.Storage.csproj" />
+    <ProjectReference Include="..\BackupApp.BackupEngine\BackupApp.BackupEngine.csproj" />
+    <ProjectReference Include="..\BackupApp.RestoreEngine\BackupApp.RestoreEngine.csproj" />
+    <ProjectReference Include="..\BackupApp.Scheduler\BackupApp.Scheduler.csproj" />
+    <ProjectReference Include="..\BackupApp.Platform.Windows\BackupApp.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>

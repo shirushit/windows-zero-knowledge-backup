@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>BackupApp.Scheduler</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BackupApp.Domain\BackupApp.Domain.csproj" />
+    <ProjectReference Include="..\BackupApp.BackupEngine\BackupApp.BackupEngine.csproj" />
+  </ItemGroup>
+</Project>

@@ -41,4 +41,18 @@ Problems: None.
 Decisions: Selected .NET 8 (C#) with WPF (Fluent RTL), SQLite, and NSec / libsodium as Windows desktop implementation stack.
 Next: Task 0.3 Application skeleton.
 
+### 2026-09-07 22:38 +03:00 — Tasks 0.3 & 0.4 Skeleton and Dependency Governance
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/0.3-application-skeleton
+Commit: pending
+Plan items: 0.3 Application skeleton, 0.4 Dependency governance
+Completed: Created 10 application projects and 2 test projects according to ARCHITECTURE.md boundaries. Enabled Central Package Management, Directory.Build.props with strict analysis, and reproducible lockfiles.
+Changed: Added BackupApp.sln, Directory.Build.props, Directory.Packages.props, projects under src/ and tests/, and packages.lock.json files.
+Tests/build: Clean build (0 warnings, 0 errors); unit and crypto test runners passed; `dotnet restore --locked-mode` verified.
+Security review: No credentials or tokens; crypto abstractions isolated in BackupApp.Crypto with libsodium; domain models isolated from providers/UI.
+Problems: None.
+Decisions: Suppressed CA1707 only for test assemblies to permit standard test naming conventions.
+Next: Task 0.5 CI bootstrap.
+
+
 
