@@ -119,6 +119,20 @@ Problems: None.
 Decisions: Excluded directory recursion occurs immediately at directory evaluation time to avoid unnecessary disk I/O on large ignored trees (like node_modules).
 Next: Task 1.5 Metadata capture and stable-read detection & Task 1.6 Content hashing streaming implementation.
 
+### 2026-09-08 00:22 +03:00 — Tasks 1.5 & 1.6 Stable-Read Capture and Streaming Hashing completed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/1.5-1.6-stable-read-hashing
+Commit: pending
+Plan items: 1.5 Metadata capture and stable-read detection, 1.6 Content hashing streaming implementation
+Completed: Implemented StreamingHasher with 64KB bounded buffer and progress reporting; implemented StableFileCaptureService with FileShare.ReadWrite, pre/post metadata stability validation, sharing violation detection (locked files), backoff retries, and multi-chunk partitioning (up to 8MB chunk descriptors). Added 6 unit tests covering empty, small, multi-chunk, missing, and locked files.
+Changed: Added src/BackupApp.BackupEngine/Capture/StreamingHasher.cs, StableFileCapture.cs, tests/BackupApp.UnitTests/StableFileCaptureTests.cs; updated PLAN.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (55/55 tests); `dotnet format --verify-no-changes` passed.
+Security review: Zero memory-exhaustion risk: stream hashing operates strictly within 64KB buffer windows. Locked and mutating files are safely detected rather than uploading partial/corrupted states.
+Problems: None.
+Decisions: Files smaller than max chunk size emit a single chunk whose hash equals whole-file hash; empty files emit valid empty SHA-256 chunk.
+Next: Task 1.7 Change detection & Task 1.8 Snapshot/version state machine.
+
+
 
 
 

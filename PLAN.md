@@ -27,8 +27,8 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 - [x] **1.2 SQLite/catalog schema + migrations**
 - [x] **1.3 Canonical internal path model**
 - [x] **1.4 File discovery with exclusions**
-- [ ] **1.5 Metadata capture and stable-read detection**
-- [ ] **1.6 Content hashing streaming implementation**
+- [x] **1.5 Metadata capture and stable-read detection**
+- [x] **1.6 Content hashing streaming implementation**
 - [ ] **1.7 Change detection: new/changed/unchanged/deleted/renamed policy**
 - [ ] **1.8 Snapshot/version state machine**
 - [ ] **1.9 Persistent resumable job model**
