@@ -27,6 +27,21 @@
           "Microsoft.TestPlatform.TestHost": "17.11.1"
         }
       },
+      "NSec.Cryptography": {
+        "type": "Direct",
+        "requested": "[24.4.0, )",
+        "resolved": "24.4.0",
+        "contentHash": "R89OF0T5OY9QnPRoTsMCaPKMqtXcWKZSWAO4zyUaFHI+ZRMgXU7WaIwg/rPP3vOfdaLl8HdUHWkDB+2B9FOO7g==",
+        "dependencies": {
+          "libsodium": "[1.0.19, 1.0.20)"
+        }
+      },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Direct",
+        "requested": "[8.0.0, )",
+        "resolved": "8.0.0",
+        "contentHash": "+TUFINV2q2ifyXauQXRwy4CiBhqvDEDZeVJU7qfxya4aRYOKzVBpN+4acx25VcPB9ywUN6C0n8drWl110PhZEg=="
+      },
       "xunit": {
         "type": "Direct",
         "requested": "[2.9.0, )",
@@ -133,26 +148,12 @@
         "type": "Project",
         "dependencies": {
           "BackupApp.Domain": "[1.0.0, )",
-          "NSec.Cryptography": "[24.4.0, )"
+          "NSec.Cryptography": "[24.4.0, )",
+          "System.Security.Cryptography.ProtectedData": "[8.0.0, )"
         }
       },
       "backupapp.domain": {
         "type": "Project"
-      },
-      "NSec.Cryptography": {
-        "type": "CentralTransitive",
-        "requested": "[24.4.0, )",
-        "resolved": "24.4.0",
-        "contentHash": "R89OF0T5OY9QnPRoTsMCaPKMqtXcWKZSWAO4zyUaFHI+ZRMgXU7WaIwg/rPP3vOfdaLl8HdUHWkDB+2B9FOO7g==",
-        "dependencies": {
-          "libsodium": "[1.0.19, 1.0.20)"
-        }
-      },
-      "System.Security.Cryptography.ProtectedData": {
-        "type": "CentralTransitive",
-        "requested": "[8.0.0, )",
-        "resolved": "4.4.0",
-        "contentHash": "cJV7ScGW7EhatRsjehfvvYVBvtiSMKgN8bOVI0bQhnF5bU7vnHVIsH49Kva7i7GWaWYvmEzkYVk1TC+gZYBEog=="
       }
     }
   }

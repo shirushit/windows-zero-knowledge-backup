@@ -1,35 +1,79 @@
-namespace BackupApp.Crypto;
+using System.Security.Cryptography;
+using NSec.Cryptography;
 
-public record EncryptedEnvelope(
-    byte FormatVersion,
-    byte[] Salt,
-    byte[] Nonce,
-    byte[] CiphertextWithTag
-);
+namespace BackupApp.Crypto;
 
 public interface ICryptoService
 {
-    byte[] DeriveKey(string password, byte[] salt);
-    EncryptedEnvelope Encrypt(ReadOnlySpan<byte> plaintext, ReadOnlySpan<byte> key, ReadOnlySpan<byte> associatedData);
-    byte[] Decrypt(EncryptedEnvelope envelope, ReadOnlySpan<byte> key, ReadOnlySpan<byte> associatedData);
+    byte[] DeriveKey(string password, byte[] salt, KdfParameters? parameters = null);
+    EncryptedEnvelope Encrypt(ReadOnlySpan<byte> plaintext, ReadOnlySpan<byte> key, ReadOnlySpan<byte> associatedData = default);
+    byte[] Decrypt(EncryptedEnvelope envelope, ReadOnlySpan<byte> key, ReadOnlySpan<byte> associatedData = default);
+    byte[] Decrypt(ReadOnlySpan<byte> envelopeBytes, ReadOnlySpan<byte> key, ReadOnlySpan<byte> associatedData = default);
 }
 
 public sealed class CryptoService : ICryptoService
 {
-    public const byte CurrentFormatVersion = 1;
+    private static readonly AeadAlgorithm Algorithm = AeadAlgorithm.XChaCha20Poly1305;
 
-    public byte[] DeriveKey(string password, byte[] salt)
+    public const byte CurrentFormatVersion = EncryptedEnvelope.CurrentFormatVersion;
+
+    public byte[] DeriveKey(string password, byte[] salt, KdfParameters? parameters = null)
     {
-        throw new NotImplementedException("Argon2id derivation will be implemented in Phase 2.");
+        ArgumentNullException.ThrowIfNull(password);
+        ArgumentNullException.ThrowIfNull(salt);
+
+        var kdf = parameters ?? KdfParameters.CreateDefault(salt);
+        return kdf.DeriveKey(password);
     }
 
-    public EncryptedEnvelope Encrypt(ReadOnlySpan<byte> plaintext, ReadOnlySpan<byte> key, ReadOnlySpan<byte> associatedData)
+    public EncryptedEnvelope Encrypt(ReadOnlySpan<byte> plaintext, ReadOnlySpan<byte> key, ReadOnlySpan<byte> associatedData = default)
     {
-        throw new NotImplementedException("AEAD encryption envelope will be implemented in Phase 2.");
+        if (key.Length != Algorithm.KeySize)
+        {
+            throw new ArgumentException($"Key must be exactly {Algorithm.KeySize} bytes.", nameof(key));
+        }
+
+        var nonce = RandomNumberGenerator.GetBytes(Algorithm.NonceSize);
+
+        using var nsecKey = Key.Import(Algorithm, key, KeyBlobFormat.RawSymmetricKey);
+        var ciphertextWithTag = Algorithm.Encrypt(nsecKey, nonce, associatedData, plaintext);
+
+        return new EncryptedEnvelope(
+            CurrentFormatVersion,
+            EncryptedEnvelope.CipherXChaCha20Poly1305,
+            nonce,
+            ciphertextWithTag
+        );
     }
 
-    public byte[] Decrypt(EncryptedEnvelope envelope, ReadOnlySpan<byte> key, ReadOnlySpan<byte> associatedData)
+    public byte[] Decrypt(EncryptedEnvelope envelope, ReadOnlySpan<byte> key, ReadOnlySpan<byte> associatedData = default)
     {
-        throw new NotImplementedException("AEAD decryption envelope will be implemented in Phase 2.");
+        ArgumentNullException.ThrowIfNull(envelope);
+
+        if (key.Length != Algorithm.KeySize)
+        {
+            throw new ArgumentException($"Key must be exactly {Algorithm.KeySize} bytes.", nameof(key));
+        }
+
+        if (envelope.CipherId != EncryptedEnvelope.CipherXChaCha20Poly1305)
+        {
+            throw new CryptographicException($"Unsupported cipher ID: {envelope.CipherId}.");
+        }
+
+        using var nsecKey = Key.Import(Algorithm, key, KeyBlobFormat.RawSymmetricKey);
+        var plaintext = Algorithm.Decrypt(nsecKey, envelope.Nonce, associatedData, envelope.CiphertextWithTag);
+
+        if (plaintext == null)
+        {
+            throw new CryptographicException("AEAD authentication verification failed: data is tampered, corrupted, or key is invalid.");
+        }
+
+        return plaintext;
+    }
+
+    public byte[] Decrypt(ReadOnlySpan<byte> envelopeBytes, ReadOnlySpan<byte> key, ReadOnlySpan<byte> associatedData = default)
+    {
+        var envelope = EncryptedEnvelope.FromBytes(envelopeBytes);
+        return Decrypt(envelope, key, associatedData);
     }
 }

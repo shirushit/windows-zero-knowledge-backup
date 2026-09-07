@@ -2,11 +2,11 @@
 
 **Rule:** This file is executable project state, not a retrospective. Do not change goals to match accidental implementation. Hard direction changes require `[?]` + `DECISIONS.md` + human approval.
 
-Current phase: 2
-Current milestone: Cryptographic Foundation
+Current phase: 3
+Current milestone: Storage Abstraction + Telegram MVP
 Overall status: IN DEVELOPMENT
-Last verified commit: (Gate 1 Passed)
-Last updated: 2026-09-08 00:30 +03:00
+Last verified commit: (Gate 2 Passed)
+Last updated: 2026-09-08 01:10 +03:00
 
 ## Global completion protocol
 For every numbered item: set `[~]` before implementation; implement; run acceptance tests; security-check; document; commit; then set `[x]` and record commit/checkpoint. If blocked use `[!]` with reason. Continue automatically to the next unblocked item.
@@ -37,16 +37,16 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 **GATE 1:** deterministic fixture scan twice yields correct incremental delta; crash/restart leaves catalog consistent.
 
 # PHASE 2 — CRYPTOGRAPHIC FOUNDATION
-- [ ] **2.1 Select maintained crypto library/primitives** — document exact choices and rationale.
-- [ ] **2.2 Password KDF benchmark + versioned parameters**
-- [ ] **2.3 Master key generation and key hierarchy**
-- [ ] **2.4 Wrapped key storage format**
-- [ ] **2.5 Versioned AEAD object envelope**
-- [ ] **2.6 Encrypted/authenticated manifest/catalog export format**
-- [ ] **2.7 Recovery-key flow**
-- [ ] **2.8 Secure credential/key persistence using supported Windows facilities where appropriate**
-- [ ] **2.9 Crypto negative tests: wrong key, tamper, truncation, wrong AAD/version**
-- [ ] **2.10 Threat-model review**
+- [x] **2.1 Select maintained crypto library/primitives** — document exact choices and rationale.
+- [x] **2.2 Password KDF benchmark + versioned parameters**
+- [x] **2.3 Master key generation and key hierarchy**
+- [x] **2.4 Wrapped key storage format**
+- [x] **2.5 Versioned AEAD object envelope**
+- [x] **2.6 Encrypted/authenticated manifest/catalog export format**
+- [x] **2.7 Recovery-key flow**
+- [x] **2.8 Secure credential/key persistence using supported Windows facilities where appropriate**
+- [x] **2.9 Crypto negative tests: wrong key, tamper, truncation, wrong AAD/version**
+- [x] **2.10 Threat-model review**
 
 **GATE 2:** plaintext fixture never appears in remote-ready payload; tampering is reliably detected; key/recovery tests pass. No production remote upload before this gate.
 
