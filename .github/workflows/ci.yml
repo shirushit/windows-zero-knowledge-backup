@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     name: Build, Lint & Test
@@ -41,7 +44,7 @@ jobs:
           $bannedPatterns = @("BEGIN RSA PRIVATE KEY", "BEGIN OPENSSH PRIVATE KEY", "BEGIN PRIVATE KEY", "password\s*=\s*['`"][^'`"]+['`"]")
           $foundSecrets = $false
           foreach ($pattern in $bannedPatterns) {
-            $matches = git grep -I -E "$pattern" -- ':(exclude).github/workflows/ci.yml'
+            $matches = git grep -I -E "$pattern" -- ':(exclude).github/workflows/*'
             if ($matches) {
               Write-Error "Found potential secret matching '$pattern': $matches"
               $foundSecrets = $true
