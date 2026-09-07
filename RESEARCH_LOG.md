@@ -132,6 +132,19 @@ Problems: None.
 Decisions: Files smaller than max chunk size emit a single chunk whose hash equals whole-file hash; empty files emit valid empty SHA-256 chunk.
 Next: Task 1.7 Change detection & Task 1.8 Snapshot/version state machine.
 
+### 2026-09-08 00:30 +03:00 — Tasks 1.7-1.10 and Gate 1 (Incremental Delta & Resilient Catalog) Passed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/1.7-1.10-change-detection-state-search
+Commit: pending
+Plan items: 1.7 Change detection, 1.8 Snapshot state machine, 1.9 Persistent resumable job model, 1.10 Local search indexes, GATE 1
+Completed: Implemented ChangeDetectionService detecting New, Modified, Unchanged, Deleted, and Renamed files; implemented SnapshotStateMachine enforcing monotonically increasing snapshot numbers and strictly valid state transitions; implemented ResumableJobCoordinator for managing backup/restore jobs; implemented SearchFilesAsync index search in SqliteCatalogRepository. Added comprehensive Gate 1 test fixture (Gate1VerificationTests) verifying deterministic dual-scan incremental delta (2 unchanged, 1 modified, 1 deleted, 1 renamed, 1 new) and crash/restart consistency across repository instances.
+Changed: Added src/BackupApp.BackupEngine/ChangeDetection/ChangeDetectionService.cs, src/BackupApp.BackupEngine/SnapshotStateMachine.cs, src/BackupApp.BackupEngine/ResumableJobCoordinator.cs, tests/BackupApp.UnitTests/Gate1VerificationTests.cs; updated src/BackupApp.Catalog/ICatalogRepository.cs, src/BackupApp.Catalog/SqliteCatalogRepository.cs, PLAN.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (56/56 tests); `dotnet format --verify-no-changes` passed.
+Security review: SQLite parameterization used across all search queries preventing SQL injection; snapshot state machine prevents invalid state jumps; monotonic snapshot numbering prevents rollback/reordering ambiguities.
+Problems: Fixed an unclosed loop syntax error in test fixture.
+Decisions: Renames detected by matching content hash of deleted entries with newly found files; catalog search uses parameterized LIKE prefix/substring filtering.
+Next: Phase 2 Cryptographic Foundation (Task 2.1 Select maintained crypto library/primitives).
+
 
 
 

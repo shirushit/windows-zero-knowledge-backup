@@ -27,6 +27,7 @@ public interface ICatalogRepository : IAsyncDisposable
     );
     Task<IReadOnlyList<FileVersion>> GetSnapshotFilesAsync(SnapshotId snapshotId, CancellationToken cancellationToken = default);
     Task<FileVersion?> GetLatestFileVersionAsync(BackupSetId backupSetId, CanonicalPath path, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<FileVersion>> SearchFilesAsync(BackupSetId backupSetId, string searchTerm, SnapshotId? snapshotId = null, int maxResults = 100, CancellationToken cancellationToken = default);
 
     // Chunks & Remote Refs
     Task SaveChunksAsync(IEnumerable<StoredChunk> chunks, CancellationToken cancellationToken = default);
