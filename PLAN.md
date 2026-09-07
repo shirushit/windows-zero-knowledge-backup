@@ -2,11 +2,11 @@
 
 **Rule:** This file is executable project state, not a retrospective. Do not change goals to match accidental implementation. Hard direction changes require `[?]` + `DECISIONS.md` + human approval.
 
-Current phase: 0
-Current milestone: Foundation
+Current phase: 1
+Current milestone: Domain + Local Catalog
 Overall status: IN DEVELOPMENT
-Last verified commit: N/A
-Last updated: 2026-09-07 22:05 +03:00
+Last verified commit: 5cdee32 (Gate 0 Passed)
+Last updated: 2026-09-07 22:45 +03:00
 
 ## Global completion protocol
 For every numbered item: set `[~]` before implementation; implement; run acceptance tests; security-check; document; commit; then set `[x]` and record commit/checkpoint. If blocked use `[!]` with reason. Continue automatically to the next unblocked item.
