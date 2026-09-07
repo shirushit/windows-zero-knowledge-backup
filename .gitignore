@@ -1,0 +1,55 @@
+## .NET / C# Build & Output Directories
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+[Tt]emp/
+[Tt]mp/
+TestResults/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+.idea/
+.vscode/
+
+## Visual Studio cache and temp files
+*.ide/
+*.rsuser
+_ReSharper*/
+*.DotSettings.user
+
+## Crash and memory dumps
+*.dmp
+*.mdmp
+*.crash
+
+## Windows OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+## Secrets, Credentials & Keys (Mandatory Security Policy)
+*.key
+*.token
+*.pfx
+*.p12
+*.pem
+*.secret
+*.secrets
+secrets.json
+appsettings*.Development.json
+appsettings*.local.json
+.env
+.env.*
+!.env.example
+*.kdbx
+*.session
+
+## Test and Local Data Artifacts
+*.db-shm
+*.db-wal
+local_test_data/
+scratch/
