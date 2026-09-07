@@ -66,6 +66,7 @@ public sealed class TelegramStorageAdapter : IStorageProvider
         ObjectId id,
         Stream contentStream,
         IProgress<long>? progress = null,
+        bool isCatalogAnchor = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contentStream);
@@ -108,7 +109,7 @@ public sealed class TelegramStorageAdapter : IStorageProvider
 
             lock (_lock)
             {
-                if (!_manifestAnchors.Contains(id) && id.Value.Contains("manifest", StringComparison.OrdinalIgnoreCase))
+                if (!_manifestAnchors.Contains(id) && (isCatalogAnchor || id.Value.Contains("manifest", StringComparison.OrdinalIgnoreCase)))
                 {
                     _manifestAnchors.Add(id);
                 }

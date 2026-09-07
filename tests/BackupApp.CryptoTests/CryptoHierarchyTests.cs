@@ -94,9 +94,9 @@ public class CryptoHierarchyTests
         var parsedSecret = recoveryService.ParseAndValidateRecoveryKey(formatted);
         parsedSecret.Should().BeEquivalentTo(rawSecret);
 
-        // Invalid checksum check: alter last character
+        // Invalid checksum check: alter first character
         var chars = formatted.ToCharArray();
-        chars[^1] = chars[^1] == 'A' ? 'B' : 'A';
+        chars[0] = chars[0] == 'A' ? 'B' : 'A';
         var tamperedKey = new string(chars);
 
         var act = () => recoveryService.ParseAndValidateRecoveryKey(tamperedKey);

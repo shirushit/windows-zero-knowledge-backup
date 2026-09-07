@@ -18,7 +18,7 @@ public class StorageTests
         using var stream = new MemoryStream(content);
 
         long lastProgress = 0;
-        var progress = new Progress<long>(p => lastProgress = p);
+        var progress = new SyncProgress<long>(p => lastProgress = p);
 
         var descriptor = await provider.PutObjectAsync(id, stream, progress);
         descriptor.Id.Should().Be(id);
@@ -130,5 +130,10 @@ public class StorageTests
                 File.Delete(queueFile);
             }
         }
+    }
+
+    private sealed class SyncProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
     }
 }

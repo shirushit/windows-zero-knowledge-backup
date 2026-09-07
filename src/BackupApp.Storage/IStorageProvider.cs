@@ -25,6 +25,7 @@ public interface IStorageProvider
         ObjectId id,
         Stream contentStream,
         IProgress<long>? progress = null,
+        bool isCatalogAnchor = false,
         CancellationToken cancellationToken = default
     );
     Task<Stream> GetObjectAsync(ObjectId id, CancellationToken cancellationToken = default);
