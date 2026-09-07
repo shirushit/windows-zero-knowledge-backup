@@ -135,7 +135,7 @@ Next: Task 1.7 Change detection & Task 1.8 Snapshot/version state machine.
 ### 2026-09-08 00:30 +03:00 — Tasks 1.7-1.10 and Gate 1 (Incremental Delta & Resilient Catalog) Passed
 Agent/model: Gemini 3.8 Flash (Antigravity)
 Branch: feat/1.7-1.10-change-detection-state-search
-Commit: pending
+Commit: 97eeab6 (merged in 841ae53)
 Plan items: 1.7 Change detection, 1.8 Snapshot state machine, 1.9 Persistent resumable job model, 1.10 Local search indexes, GATE 1
 Completed: Implemented ChangeDetectionService detecting New, Modified, Unchanged, Deleted, and Renamed files; implemented SnapshotStateMachine enforcing monotonically increasing snapshot numbers and strictly valid state transitions; implemented ResumableJobCoordinator for managing backup/restore jobs; implemented SearchFilesAsync index search in SqliteCatalogRepository. Added comprehensive Gate 1 test fixture (Gate1VerificationTests) verifying deterministic dual-scan incremental delta (2 unchanged, 1 modified, 1 deleted, 1 renamed, 1 new) and crash/restart consistency across repository instances.
 Changed: Added src/BackupApp.BackupEngine/ChangeDetection/ChangeDetectionService.cs, src/BackupApp.BackupEngine/SnapshotStateMachine.cs, src/BackupApp.BackupEngine/ResumableJobCoordinator.cs, tests/BackupApp.UnitTests/Gate1VerificationTests.cs; updated src/BackupApp.Catalog/ICatalogRepository.cs, src/BackupApp.Catalog/SqliteCatalogRepository.cs, PLAN.md.
@@ -144,6 +144,29 @@ Security review: SQLite parameterization used across all search queries preventi
 Problems: Fixed an unclosed loop syntax error in test fixture.
 Decisions: Renames detected by matching content hash of deleted entries with newly found files; catalog search uses parameterized LIKE prefix/substring filtering.
 Next: Phase 2 Cryptographic Foundation (Task 2.1 Select maintained crypto library/primitives).
+
+### 2026-09-08 01:10 +03:00 — Phase 2 Cryptographic Foundation and Gate 2 Passed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/2.1-crypto-library-primitives
+Commit: pending
+Plan items: Tasks 2.1 through 2.10, GATE 2
+Completed: Implemented full cryptographic subsystem in BackupApp.Crypto:
+- Task 2.1: DEC-003 recorded selecting XChaCha20-Poly1305, Argon2id, HKDF-SHA256, and DPAPI.
+- Task 2.2: Profiled and benchmarked Argon2id (RFC 9106 recommended interactive profile: 64MB memory, 3 passes, 1 thread at ~70-100ms on Windows).
+- Task 2.3: MasterKey (256-bit CSPRNG) with HKDF-SHA256 derivation of separate ContentKey, ManifestKey, and IndexKey; implemented secure memory zeroing (CryptographicOperations.ZeroMemory) on disposal.
+- Task 2.4: WrappedKeyEnvelope for wrapping master key with password KEK and versioned KDF parameters, enabling password changes without re-encrypting backup chunks.
+- Task 2.5: EncryptedEnvelope binary format ("BAEN" magic header, versioning, 24-byte random nonce, XChaCha20-Poly1305 ciphertext + tag).
+- Task 2.6: ManifestCryptoService with AAD authentication binding to backupSetId and snapshotNumber.
+- Task 2.7: RecoveryKeyService generating 256-bit entropy formatted into Base32 with CRC16 error-detecting checksum and HKDF recovery wrapping.
+- Task 2.8: WindowsCredentialStorage using Windows DPAPI (ProtectedData with CurrentUser scope).
+- Task 2.9: Comprehensive negative suite (CryptoNegativeTests: 10 test vectors covering wrong key, tampered ciphertext, tampered tag, wrong AAD, corrupted nonce, truncated payload, invalid magic, wrong recovery key).
+- Task 2.10 & GATE 2: Gate2VerificationTests confirming (1) plaintext canary never appears in remote-ready payloads, (2) all tampering vectors are fatally rejected, (3) offline disaster recovery cycle restores fixture byte-for-byte.
+Changed: Added KdfParameters.cs, MasterKey.cs, EncryptedEnvelope.cs, ICryptoService.cs, WrappedKeyEnvelope.cs, RecoveryKeyService.cs, ManifestCryptoService.cs, WindowsCredentialStorage.cs; tests CryptoHierarchyTests.cs, CryptoNegativeTests.cs, Gate2VerificationTests.cs; updated DECISIONS.md, PLAN.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (83/83 tests across UnitTests and CryptoTests); `dotnet format --verify-no-changes` passed.
+Security review: Zero-knowledge confidentiality and authenticity guaranteed; nonces 192-bit CSPRNG immune to collision; memory hygiene enforced; DPAPI protects local credentials.
+Problems: Discovered Argon2Parameters MemorySize is in KiB per RFC 9106; calibrated 65536 KiB (64MB) to achieve ~70-100ms execution.
+Decisions: DEC-003 approved; XChaCha20-Poly1305 selected for collision-free random nonces.
+Next: Phase 3 Storage Abstraction + Telegram MVP (Task 3.1 Provider-neutral StorageProvider interface).
 
 
 

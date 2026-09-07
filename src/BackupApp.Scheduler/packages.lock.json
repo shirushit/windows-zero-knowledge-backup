@@ -70,7 +70,8 @@
         "type": "Project",
         "dependencies": {
           "BackupApp.Domain": "[1.0.0, )",
-          "NSec.Cryptography": "[24.4.0, )"
+          "NSec.Cryptography": "[24.4.0, )",
+          "System.Security.Cryptography.ProtectedData": "[8.0.0, )"
         }
       },
       "backupapp.domain": {
@@ -100,6 +101,12 @@
         "dependencies": {
           "libsodium": "[1.0.19, 1.0.20)"
         }
+      },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "CentralTransitive",
+        "requested": "[8.0.0, )",
+        "resolved": "8.0.0",
+        "contentHash": "+TUFINV2q2ifyXauQXRwy4CiBhqvDEDZeVJU7qfxya4aRYOKzVBpN+4acx25VcPB9ywUN6C0n8drWl110PhZEg=="
       }
     }
   }

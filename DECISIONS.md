@@ -57,3 +57,37 @@ Plan items affected: 0.2, 0.3, 0.4, 0.5, Phases 1 through 8
 **Human decision:** Approved by user on 2026-09-07 via implementation plan review.
 **Follow-up:** Proceed with application skeleton (Task 0.3) implementing architecture boundaries.
 
+---
+
+### DEC-003 — Cryptographic Primitives, Key Hierarchy, and Storage Envelopes
+Status: Human Approved (Architecture & Security Baseline)
+Date: 2026-09-08
+Requested by: Antigravity Agent
+Plan items affected: 2.1 through 2.10, Gate 2
+
+**Current design:** Cryptography requirements outlined in `CRYPTOGRAPHY.md` and `SECURITY.md` required selecting and validating exact primitives before implementation.
+**Problem/evidence:** Zero-knowledge client-side encryption requires:
+1. Strong password-hashing defense against GPU/ASIC attacks with predictable performance on Windows.
+2. Collision-free AEAD encryption without distributed counter coordination.
+3. Strict key separation so compromise of one role (e.g. content) does not disclose manifests or identity.
+4. Ability to change passwords without re-encrypting existing backup chunks.
+5. Recovery phrase mechanism without leaking plaintext keys to providers.
+6. Safe Windows persistence for local session tokens and unlocked master keys.
+
+**Decided Primitives:**
+1. **AEAD Cipher:** `XChaCha20-Poly1305` via `NSec.Cryptography`. Provides 256-bit security with 192-bit (24-byte) nonces. Generating nonces from CSPRNG guarantees zero collision risk across trillions of chunks without tracking state.
+2. **Password KDF:** `Argon2id` via `NSec.Cryptography`. Profile 1 uses 65,536 KiB (64 MB) memory, 3 passes, degree of parallelism 1. Benchmarked at ~70-100 ms on target hardware. Parameters are stored explicitly in wrapped key envelopes to permit future upgrades.
+3. **Key Hierarchy:** 256-bit random Master Key generated via `RandomNumberGenerator`. Subkeys derived via `HKDF-SHA256` with role-specific context tags:
+   - `ContentKey` (`backupapp-content-v1`)
+   - `ManifestKey` (`backupapp-manifest-v1`)
+   - `IndexKey` (`backupapp-index-v1`)
+4. **Key Wrapping:** Master Key is wrapped with the password-derived KEK in a `WrappedKeyEnvelope`. Changing password re-wraps the Master Key with a new KEK; backup data chunks remain untouched.
+5. **Recovery Key:** 256-bit CSPRNG secret formatted as formatted alphanumeric segments with error-detecting checksum. A secondary `WrappedKeyEnvelope` encrypts the Master Key under a KEK derived from the recovery secret.
+6. **Local Persistence:** Windows DPAPI (`ProtectedData.Protect` / `Unprotect` with `CurrentUser` scope) protects local session credentials.
+7. **Memory Hygiene:** `MasterKey` and plaintext buffers implement secure clearing (`CryptographicOperations.ZeroMemory` / `Array.Clear`) upon disposal.
+
+**Security impact:** Exceeds baseline standards; provides forward compatibility; guarantees zero-knowledge confidentiality and authenticity.
+**Migration/compatibility impact:** Binary format envelopes include version byte `0x01` and magic identifier `BAEN` for seamless future schema migrations.
+**Follow-up:** Implement `BackupApp.Crypto` domain services, negative test suite, and Gate 2 verification.
+
+

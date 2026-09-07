@@ -70,7 +70,8 @@
         "type": "Project",
         "dependencies": {
           "BackupApp.Domain": "[1.0.0, )",
-          "NSec.Cryptography": "[24.4.0, )"
+          "NSec.Cryptography": "[24.4.0, )",
+          "System.Security.Cryptography.ProtectedData": "[8.0.0, )"
         }
       },
       "backupapp.domain": {
