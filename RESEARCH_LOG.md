@@ -28,3 +28,17 @@ Problems: None.
 Decisions: Initialized repository on main branch; MIT License applied.
 Next: Task 0.2 Select Windows implementation stack & record DEC-002.
 
+### 2026-09-07 22:30 +03:00 — Task 0.2 Windows implementation stack selected
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/0.2-stack-selection
+Commit: pending
+Plan item: 0.2 Select Windows implementation stack
+Completed: Stack evaluation and selection completed; DEC-002 recorded with Human Approval.
+Changed: Updated DECISIONS.md with DEC-002; updated PLAN.md item 0.2 to [x].
+Tests/build: N/A.
+Security review: Evaluated managed memory safety, DPAPI key storage, libsodium crypto bindings, and absence of Electron/browser overhead.
+Problems: None.
+Decisions: Selected .NET 8 (C#) with WPF (Fluent RTL), SQLite, and NSec / libsodium as Windows desktop implementation stack.
+Next: Task 0.3 Application skeleton.
+
+

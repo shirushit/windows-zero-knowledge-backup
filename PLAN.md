@@ -13,7 +13,7 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 
 # PHASE 0 — FOUNDATION
 - [x] **0.1 Repository bootstrap** — directories, `.gitignore`, editor config, license choice, contribution/PR templates. **Accept:** clean clone has expected structure; no secrets.
-- [ ] **0.2 Select Windows implementation stack** — evaluate native UX, background/service support, installer, crypto/library maturity, maintainability. **Accept:** decision recorded. If choice fundamentally conflicts with approved architecture, `[?]`.
+- [x] **0.2 Select Windows implementation stack** — evaluate native UX, background/service support, installer, crypto/library maturity, maintainability. **Accept:** decision recorded. If choice fundamentally conflicts with approved architecture, `[?]`.
 - [ ] **0.3 Application skeleton** — modules/boundaries from `ARCHITECTURE.md`. **Accept:** clean build.
 - [ ] **0.4 Dependency governance** — lockfiles, update policy, license/vulnerability review. **Accept:** reproducible dependency restore.
 - [ ] **0.5 CI bootstrap** — build/lint/unit/secret/dependency checks. **Accept:** PR CI passes on clean branch and fails a deliberate test fixture.
