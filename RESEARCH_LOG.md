@@ -54,5 +54,19 @@ Problems: None.
 Decisions: Suppressed CA1707 only for test assemblies to permit standard test naming conventions.
 Next: Task 0.5 CI bootstrap.
 
+### 2026-09-07 22:42 +03:00 — Task 0.5 CI bootstrap completed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/0.5-ci-bootstrap
+Commit: pending
+Plan item: 0.5 CI bootstrap
+Completed: GitHub Actions workflow created (.github/workflows/ci.yml) covering locked restore, format verification, Release build, unit/crypto testing, code coverage collection, and secret scanning. Verified clean pass and verified deliberate failure fixture exits with code 1.
+Changed: Added .github/workflows/ci.yml; updated PLAN.md item 0.5 to [x].
+Tests/build: `dotnet format --verify-no-changes`, `dotnet build -c Release`, and `dotnet test -c Release` executed cleanly. Deliberate failure test confirmed to fail build.
+Security review: Secret scan script integrated into CI verifying no private keys or plaintext credentials can be merged.
+Problems: None.
+Decisions: CI workflow targets windows-latest runner with strict locked restore.
+Next: Task 0.6 Git protections/workflow & Task 0.7 Baseline performance budgets.
+
+
 
 

@@ -16,7 +16,7 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 - [x] **0.2 Select Windows implementation stack** — evaluate native UX, background/service support, installer, crypto/library maturity, maintainability. **Accept:** decision recorded. If choice fundamentally conflicts with approved architecture, `[?]`.
 - [x] **0.3 Application skeleton** — modules/boundaries from `ARCHITECTURE.md`. **Accept:** clean build.
 - [x] **0.4 Dependency governance** — lockfiles, update policy, license/vulnerability review. **Accept:** reproducible dependency restore.
-- [ ] **0.5 CI bootstrap** — build/lint/unit/secret/dependency checks. **Accept:** PR CI passes on clean branch and fails a deliberate test fixture.
+- [x] **0.5 CI bootstrap** — build/lint/unit/secret/dependency checks. **Accept:** PR CI passes on clean branch and fails a deliberate test fixture.
 - [ ] **0.6 Git protections/workflow** — protected main, PR template/checks. **Accept:** direct unsafe merge path prevented where hosting supports it.
 - [ ] **0.7 Baseline performance budgets** — measure/define realistic idle and active budgets. **Accept:** budgets recorded in `PERFORMANCE.md`.
 

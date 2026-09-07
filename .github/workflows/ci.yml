@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build, Lint & Test
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies (locked mode)
+        run: dotnet restore --locked-mode BackupApp.sln
+
+      - name: Verify formatting and style
+        run: dotnet format BackupApp.sln --verify-no-changes --no-restore
+
+      - name: Compile solution (Release)
+        run: dotnet build BackupApp.sln -c Release --no-restore
+
+      - name: Execute unit & crypto tests
+        run: dotnet test BackupApp.sln -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage"
+
+      - name: Secret and credential scan
+        shell: pwsh
+        run: |
+          Write-Host "Scanning repository for banned patterns..."
+          $bannedPatterns = @("BEGIN RSA PRIVATE KEY", "BEGIN OPENSSH PRIVATE KEY", "BEGIN PRIVATE KEY", "password\s*=\s*['`"][^'`"]+['`"]")
+          $foundSecrets = $false
+          foreach ($pattern in $bannedPatterns) {
+            $matches = git grep -I -E "$pattern" -- ':(exclude).github/workflows/ci.yml'
+            if ($matches) {
+              Write-Error "Found potential secret matching '$pattern': $matches"
+              $foundSecrets = $true
+            }
+          }
+          if ($foundSecrets) {
+            exit 1
+          }
+          Write-Host "Secret scan passed with 0 findings."
