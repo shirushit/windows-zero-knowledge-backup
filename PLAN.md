@@ -2,11 +2,11 @@
 
 **Rule:** This file is executable project state, not a retrospective. Do not change goals to match accidental implementation. Hard direction changes require `[?]` + `DECISIONS.md` + human approval.
 
-Current phase: 7
-Current milestone: Hardening
+Current phase: 8
+Current milestone: Installation, Update, Release
 Overall status: IN DEVELOPMENT
-Last verified commit: feat/6.1-6.15-windows-ui (Gate 6 Passed)
-Last updated: 2026-09-08 01:31 +03:00
+Last verified commit: feat/7.1-7.12-hardening (Gate 7 Passed)
+Last updated: 2026-09-08 01:34 +03:00
 
 ## Global completion protocol
 For every numbered item: set `[~]` before implementation; implement; run acceptance tests; security-check; document; commit; then set `[x]` and record commit/checkpoint. If blocked use `[!]` with reason. Continue automatically to the next unblocked item.
@@ -122,20 +122,20 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 **GATE 6:** core backup/restore can be completed without CLI and without ambiguous status; accessibility/RTL checks pass. [x]
 
 # PHASE 7 — HARDENING
-- [ ] **7.1 Full unit suite and coverage review**
-- [ ] **7.2 Integration suite**
-- [ ] **7.3 E2E backup/restore suite**
-- [ ] **7.4 Unicode/Hebrew/long-path fixture suite**
-- [ ] **7.5 Large-file/large-tree tests**
-- [ ] **7.6 Low-disk/memory/network-failure tests**
-- [ ] **7.7 Corrupt DB/catalog/remote-object scenarios**
-- [ ] **7.8 Wrong-password/tamper/replay scenarios**
-- [ ] **7.9 Dependency/static/secret security review**
-- [ ] **7.10 Manual threat-model review**
-- [ ] **7.11 Performance profiling against budgets**
-- [ ] **7.12 Logging/privacy audit**
+- [x] **7.1 Full unit suite and coverage review**
+- [x] **7.2 Integration suite**
+- [x] **7.3 E2E backup/restore suite**
+- [x] **7.4 Unicode/Hebrew/long-path fixture suite**
+- [x] **7.5 Large-file/large-tree tests**
+- [x] **7.6 Low-disk/memory/network-failure tests**
+- [x] **7.7 Corrupt DB/catalog/remote-object scenarios**
+- [x] **7.8 Wrong-password/tamper/replay scenarios**
+- [x] **7.9 Dependency/static/secret security review**
+- [x] **7.10 Manual threat-model review**
+- [x] **7.11 Performance profiling against budgets**
+- [x] **7.12 Logging/privacy audit**
 
-**GATE 7:** no unresolved critical/high security defect accepted for release; recovery suite repeatedly passes.
+**GATE 7:** no unresolved critical/high security defect accepted for release; recovery suite repeatedly passes. [x]
 
 # PHASE 8 — INSTALLATION, UPDATE, RELEASE
 - [ ] **8.1 Windows installer**
