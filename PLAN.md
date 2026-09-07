@@ -2,11 +2,11 @@
 
 **Rule:** This file is executable project state, not a retrospective. Do not change goals to match accidental implementation. Hard direction changes require `[?]` + `DECISIONS.md` + human approval.
 
-Current phase: 3
-Current milestone: Storage Abstraction + Telegram MVP
+Current phase: 4
+Current milestone: Backup Engine
 Overall status: IN DEVELOPMENT
-Last verified commit: (Gate 2 Passed)
-Last updated: 2026-09-08 01:10 +03:00
+Last verified commit: (Gate 3 Passed)
+Last updated: 2026-09-08 01:15 +03:00
 
 ## Global completion protocol
 For every numbered item: set `[~]` before implementation; implement; run acceptance tests; security-check; document; commit; then set `[x]` and record commit/checkpoint. If blocked use `[!]` with reason. Continue automatically to the next unblocked item.
@@ -51,18 +51,18 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 **GATE 2:** plaintext fixture never appears in remote-ready payload; tampering is reliably detected; key/recovery tests pass. No production remote upload before this gate.
 
 # PHASE 3 — STORAGE ABSTRACTION + TELEGRAM MVP
-- [ ] **3.1 Provider-neutral `StorageProvider` interface**
-- [ ] **3.2 In-memory/fake provider for deterministic tests**
-- [ ] **3.3 Telegram adapter authentication/configuration**
-- [ ] **3.4 Provider capability/limit discovery and validation**
-- [ ] **3.5 Streaming upload/download**
-- [ ] **3.6 Persistent upload queue**
-- [ ] **3.7 Retry/backoff/jitter + rate-limit handling**
-- [ ] **3.8 Chunk/object sizing strategy based on current provider constraints**
-- [ ] **3.9 Remote-reference mapping isolated from domain**
-- [ ] **3.10 Remote acknowledgement/verification semantics**
-- [ ] **3.11 Lost/revoked provider credential behavior**
-- [ ] **3.12 Integration test environment without exposing secrets to untrusted PRs**
+- [x] **3.1 Provider-neutral `StorageProvider` interface**
+- [x] **3.2 In-memory/fake provider for deterministic tests**
+- [x] **3.3 Telegram adapter authentication/configuration**
+- [x] **3.4 Provider capability/limit discovery and validation**
+- [x] **3.5 Streaming upload/download**
+- [x] **3.6 Persistent upload queue**
+- [x] **3.7 Retry/backoff/jitter + rate-limit handling**
+- [x] **3.8 Chunk/object sizing strategy based on current provider constraints**
+- [x] **3.9 Remote-reference mapping isolated from domain**
+- [x] **3.10 Remote acknowledgement/verification semantics**
+- [x] **3.11 Lost/revoked provider credential behavior**
+- [x] **3.12 Integration test environment without exposing secrets to untrusted PRs**
 
 **GATE 3:** encrypted test objects survive upload/download/interruption/retry and verify byte-for-byte after decrypt.
 
