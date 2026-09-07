@@ -2,11 +2,11 @@
 
 **Rule:** This file is executable project state, not a retrospective. Do not change goals to match accidental implementation. Hard direction changes require `[?]` + `DECISIONS.md` + human approval.
 
-Current phase: 4
-Current milestone: Backup Engine
+Current phase: 5
+Current milestone: Restore Engine
 Overall status: IN DEVELOPMENT
-Last verified commit: (Gate 3 Passed)
-Last updated: 2026-09-08 01:15 +03:00
+Last verified commit: feat/4.1-4.13-backup-engine (Gate 4 Passed)
+Last updated: 2026-09-08 01:21 +03:00
 
 ## Global completion protocol
 For every numbered item: set `[~]` before implementation; implement; run acceptance tests; security-check; document; commit; then set `[x]` and record commit/checkpoint. If blocked use `[!]` with reason. Continue automatically to the next unblocked item.
@@ -67,21 +67,21 @@ For every numbered item: set `[~]` before implementation; implement; run accepta
 **GATE 3:** encrypted test objects survive upload/download/interruption/retry and verify byte-for-byte after decrypt.
 
 # PHASE 4 — BACKUP ENGINE
-- [ ] **4.1 Initial backup orchestration**
-- [ ] **4.2 Incremental backup orchestration**
-- [ ] **4.3 Streaming encryption/upload pipeline with backpressure**
-- [ ] **4.4 Atomic snapshot commit only after required remote success**
-- [ ] **4.5 Pause/resume/cancel**
-- [ ] **4.6 Network-loss recovery**
-- [ ] **4.7 Process/power-interruption recovery**
-- [ ] **4.8 File changes during backup**
-- [ ] **4.9 Locked/unreadable file policy**
-- [ ] **4.10 Rename/delete/history behavior**
-- [ ] **4.11 Conservative dedupe decision/implementation**
-- [ ] **4.12 Scheduler and startup behavior**
-- [ ] **4.13 CPU/disk/network throttling**
+- [x] **4.1 Initial backup orchestration**
+- [x] **4.2 Incremental backup orchestration**
+- [x] **4.3 Streaming encryption/upload pipeline with backpressure**
+- [x] **4.4 Atomic snapshot commit only after required remote success**
+- [x] **4.5 Pause/resume/cancel**
+- [x] **4.6 Network-loss recovery**
+- [x] **4.7 Process/power-interruption recovery**
+- [x] **4.8 File changes during backup**
+- [x] **4.9 Locked/unreadable file policy**
+- [x] **4.10 Rename/delete/history behavior**
+- [x] **4.11 Conservative dedupe decision/implementation**
+- [x] **4.12 Scheduler and startup behavior**
+- [x] **4.13 CPU/disk/network throttling**
 
-**GATE 4:** large deterministic dataset backs up, modifies incrementally, survives forced termination, resumes, and reports truthful protected/failed state.
+**GATE 4:** large deterministic dataset backs up, modifies incrementally, survives forced termination, resumes, and reports truthful protected/failed state. [x]
 
 # PHASE 5 — RESTORE ENGINE
 - [ ] **5.1 Unlock/authentication flow**

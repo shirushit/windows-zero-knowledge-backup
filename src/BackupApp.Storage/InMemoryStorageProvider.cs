@@ -30,6 +30,7 @@ public sealed class InMemoryStorageProvider : IStorageProvider
         ObjectId id,
         Stream contentStream,
         IProgress<long>? progress = null,
+        bool isCatalogAnchor = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contentStream);
@@ -57,7 +58,7 @@ public sealed class InMemoryStorageProvider : IStorageProvider
 
         lock (_lock)
         {
-            if (!_catalogAnchors.Contains(id) && id.Value.Contains("manifest", StringComparison.OrdinalIgnoreCase))
+            if (!_catalogAnchors.Contains(id) && (isCatalogAnchor || id.Value.Contains("manifest", StringComparison.OrdinalIgnoreCase)))
             {
                 _catalogAnchors.Add(id);
             }

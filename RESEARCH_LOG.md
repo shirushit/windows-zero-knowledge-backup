@@ -171,7 +171,7 @@ Next: Phase 3 Storage Abstraction + Telegram MVP (Task 3.1 Provider-neutral Stor
 ### 2026-09-08 01:15 +03:00 — Phase 3 Storage Abstraction, Telegram MVP, and Gate 3 Passed
 Agent/model: Gemini 3.8 Flash (Antigravity)
 Branch: feat/3.1-3.6-storage-abstraction-telegram
-Commit: pending
+Commit: 80cf675 (merged in 62508a8)
 Plan items: Tasks 3.1 through 3.12, GATE 3
 Completed: Implemented storage subsystem and Telegram adapter:
 - Task 3.1: Provider-neutral IStorageProvider interface with streaming, progress reporting, capabilities discovery, and deletion.
@@ -188,7 +188,32 @@ Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet tes
 Security review: Secrets redacted in configuration ToString(); encrypted objects verified byte-for-byte without leaking plaintext; TLS verification maintained; tokens stored securely via DPAPI.
 Problems: None.
 Decisions: Telegram chunk limit set to 20MB safe boundary with 8MB default chunks; exponential backoff capped at 30s with 20% jitter.
-Next: Phase 4 Backup Engine (Task 4.1 Initial backup orchestration).
+### 2026-09-08 01:21 +03:00 — Phase 4 Backup Engine and Gate 4 Passed
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/4.1-4.13-backup-engine
+Commit: pending
+Plan item: Tasks 4.1 through 4.13, GATE 4
+Completed: Implemented full backup engine subsystem in BackupApp.BackupEngine:
+- Task 4.1: Initial backup orchestration with file discovery, change detection, chunking, streaming encryption, catalog update, and remote manifest export.
+- Task 4.2: Incremental backup orchestration reusing identical chunks and persisting new/modified file versions.
+- Task 4.3: Streaming encryption and upload pipeline with bounded memory consumption and backpressure.
+- Task 4.4: Atomic snapshot commit: snapshots are saved in InProgress status and only marked Committed after all chunks and the encrypted manifest are successfully acknowledged remotely.
+- Task 4.5: Pause, resume, and cancellation tokens propagated through all I/O, encryption, and upload stages.
+- Task 4.6 & 4.7: Network-loss and forced process/power interruption recovery via SQLite WAL and durable queue retry mechanisms.
+- Task 4.8: In-flight file change detection via pre/post metadata and size comparison in StableFileCapture.
+- Task 4.9: Configurable locked/unreadable file policy (FailFast or SkipWithWarning) without aborting remaining backup items.
+- Task 4.10: Full rename, modification, deletion tracking and snapshot versioning history.
+- Task 4.11: Conservative deduplication avoiding duplicate chunk upload across files and snapshots.
+- Task 4.12: Configurable BackupEngineOptions for chunk sizing (8MB default), locked file handling, and throttling.
+- Task 4.13: Rate throttling hooks via BackupEngineOptions.
+- GATE 4: Gate4VerificationTests confirming deterministic dataset backup, incremental modification, forced process interruption, resumption without re-uploading completed chunks, and truthful protected/failed state reporting.
+Changed: Added BackupEngineOptions.cs, BackupOrchestratorTests.cs, Gate4VerificationTests.cs; updated IBackupOrchestrator.cs, SqliteCatalogRepository.cs, IStorageProvider.cs, InMemoryStorageProvider.cs, TelegramStorageAdapter.cs, StorageTests.cs, CryptoHierarchyTests.cs, PLAN.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (96/96 tests across UnitTests and CryptoTests); `dotnet format --verify-no-changes` passed.
+Security review: Zero-knowledge maintained: content chunks and snapshot manifests are encrypted with XChaCha20-Poly1305 before transmission; AAD prevents snapshot splicing/swapping.
+Problems: Fixed Base32 CRC test tampering target to first character to guarantee decoded difference; populated ChunkRefs in SqliteCatalogRepository queries; fixed Progress async race in StorageTests.
+Decisions: Default chunk size set to 8MB; LockedFileHandling defaults to SkipWithWarning; manifest saved as catalog anchor remote object.
+Next: Phase 5 Restore Engine (Task 5.1 Unlock/authentication flow).
+
 
 
 
