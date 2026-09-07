@@ -282,6 +282,28 @@ Problems: Calibrated token redaction assertion in Gate 7 test to match exact suf
 Decisions: Retained 100% test coverage for all corruption and tampering cases without relaxing any AEAD authentication gates.
 Next: Phase 8 Installation, Update, Release (Task 8.1 Windows installer).
 
+### 2026-09-08 01:45 +03:00 — Phases 8 & 9 (Installation, Update, Release & Release Gate) Completed and Verified
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/8.1-9.0-release-gate
+Commit: pending
+Plan item: Tasks 8.1 through 8.10, GATE 8, Phase 9 Release Gate
+Completed:
+- Task 8.1 & 8.6 & 8.7: Created single-file self-contained release publish script (scripts/build-release.ps1) targeting win-x64, embedded assembly metadata (Version 1.0.0, FileVersion 1.0.0.0, Product, Company), generated SHA256SUMS.txt and SBOM package inventory.
+- Task 8.2 & 8.3: Created per-user Windows installation and uninstallation scripts (scripts/install.ps1, scripts/uninstall.ps1) with Start Menu shortcut, Add/Remove programs registry integration, and safe local data preservation. Implemented automated migration idempotency tests.
+- Task 8.4: Created Authenticode code-signing script (scripts/sign-release.ps1) supporting RFC 3161 timestamping, local PFX, Windows Cert Store, and test self-signing.
+- Task 8.5: Documented air-gapped zero-knowledge update and integrity strategy without central telemetry servers.
+- Task 8.8: Created GitHub Actions release pipeline workflow (.github/workflows/release.yml) triggered on version tags.
+- Task 8.9: Created ROLLBACK.md documenting emergency downgrade, storage immutability, and disaster recovery.
+- Task 8.10: Created USER_GUIDE.md comprehensive user guide in simple Hebrew covering zero-knowledge principles, setup, master password, recovery phrase, Telegram storage configuration, backup, and disaster recovery.
+- PHASE 9 / GATE 9: Implemented ReleasePackagingTests and ReleaseGateVerificationTests testing all 8 gate criteria: clean install footprint, first backup, incremental backup deduplication, forced interruption and resume, clean-machine disaster recovery using only recovery phrase, 100% byte-for-byte SHA256 verification, metadata/timestamp preservation, chunk tampering detection, and safe wrong password rejection.
+Changed: Added scripts/build-release.ps1, scripts/install.ps1, scripts/uninstall.ps1, scripts/sign-release.ps1, USER_GUIDE.md, ROLLBACK.md, .github/workflows/release.yml, tests/BackupApp.UnitTests/ReleasePackagingTests.cs, tests/BackupApp.UnitTests/ReleaseGateVerificationTests.cs; updated Directory.Build.props, PLAN.md, RESEARCH_LOG.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (129/129 tests across UnitTests and CryptoTests); `dotnet format --verify-no-changes` passed; single-file win-x64 publish succeeded; install/uninstall smoke tests passed.
+Security review: Zero-knowledge encryption enforced across full lifecycle; zero plaintext credentials committed; token redaction intact; Authenticode and SHA256 checksums in place.
+Problems: Fixed CRLF line ending formatting across newly added tests.
+Decisions: Retained standalone single-file binary distribution with PowerShell installer for native Windows execution without external dependencies.
+Next: Final review, merge to main, and project completion.
+
+
 
 
 

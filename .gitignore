@@ -53,3 +53,5 @@ appsettings*.local.json
 *.db-wal
 local_test_data/
 scratch/
+artifacts/
+
