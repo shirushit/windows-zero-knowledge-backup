@@ -1,7 +1,7 @@
 {
   "version": 2,
   "dependencies": {
-    "net8.0": {
+    "net8.0-windows7.0": {
       "coverlet.collector": {
         "type": "Direct",
         "requested": "[6.0.2, )",
@@ -199,6 +199,13 @@
       "backupapp.domain": {
         "type": "Project"
       },
+      "backupapp.platform.windows": {
+        "type": "Project",
+        "dependencies": {
+          "BackupApp.Domain": "[1.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[8.0.0, )"
+        }
+      },
       "backupapp.restoreengine": {
         "type": "Project",
         "dependencies": {
@@ -206,6 +213,13 @@
           "BackupApp.Crypto": "[1.0.0, )",
           "BackupApp.Domain": "[1.0.0, )",
           "BackupApp.Storage": "[1.0.0, )"
+        }
+      },
+      "backupapp.scheduler": {
+        "type": "Project",
+        "dependencies": {
+          "BackupApp.BackupEngine": "[1.0.0, )",
+          "BackupApp.Domain": "[1.0.0, )"
         }
       },
       "backupapp.storage": {
@@ -218,6 +232,19 @@
         "type": "Project",
         "dependencies": {
           "BackupApp.Domain": "[1.0.0, )",
+          "BackupApp.Storage": "[1.0.0, )"
+        }
+      },
+      "backupapp.ui": {
+        "type": "Project",
+        "dependencies": {
+          "BackupApp.BackupEngine": "[1.0.0, )",
+          "BackupApp.Catalog": "[1.0.0, )",
+          "BackupApp.Crypto": "[1.0.0, )",
+          "BackupApp.Domain": "[1.0.0, )",
+          "BackupApp.Platform.Windows": "[1.0.0, )",
+          "BackupApp.RestoreEngine": "[1.0.0, )",
+          "BackupApp.Scheduler": "[1.0.0, )",
           "BackupApp.Storage": "[1.0.0, )"
         }
       },

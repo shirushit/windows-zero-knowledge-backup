@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
     <RootNamespace>BackupApp.UnitTests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
@@ -19,5 +21,10 @@
     <ProjectReference Include="..\..\src\BackupApp.Crypto\BackupApp.Crypto.csproj" />
     <ProjectReference Include="..\..\src\BackupApp.BackupEngine\BackupApp.BackupEngine.csproj" />
     <ProjectReference Include="..\..\src\BackupApp.RestoreEngine\BackupApp.RestoreEngine.csproj" />
+    <ProjectReference Include="..\..\src\BackupApp.UI\BackupApp.UI.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
   </ItemGroup>
 </Project>

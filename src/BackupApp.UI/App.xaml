@@ -3,5 +3,16 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+        <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F8F9FA"/>
+        <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="#F0F2F5"/>
+        <SolidColorBrush x:Key="AppTextPrimaryBrush" Color="#1C1C1C"/>
+        <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="#5C5C5C"/>
+        <SolidColorBrush x:Key="AppBorderBrush" Color="#DFE1E5"/>
+        <SolidColorBrush x:Key="AppAccentBrush" Color="#0067C0"/>
+        <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#1879D6"/>
+        <SolidColorBrush x:Key="AppSuccessBrush" Color="#107C10"/>
+        <SolidColorBrush x:Key="AppWarningBrush" Color="#D83B01"/>
+        <SolidColorBrush x:Key="AppErrorBrush" Color="#A80000"/>
     </Application.Resources>
 </Application>

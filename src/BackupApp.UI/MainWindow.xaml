@@ -3,22 +3,360 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BackupApp.UI.ViewModels"
         mc:Ignorable="d"
-        Title="גיבוי מאובטח ואפס-ידע"
-        Height="550" Width="800"
+        Title="גיבוי ושחזור מאובטח באפס-ידע"
+        Height="680" Width="920"
+        MinHeight="550" MinWidth="750"
         FlowDirection="RightToLeft"
-        WindowStartupLocation="CenterScreen">
-    <Grid Margin="20">
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-            <TextBlock Text="גיבוי ושחזור מאובטח לאפס-ידע"
-                       FontSize="22"
-                       FontWeight="Bold"
-                       HorizontalAlignment="Center"
-                       Margin="0,0,0,10"/>
-            <TextBlock Text="מערכת מוכנה לפעולה. כל הנתונים מוצפנים מקומית לפני ההעלאה."
-                       FontSize="14"
-                       Foreground="#555555"
-                       HorizontalAlignment="Center"/>
-        </StackPanel>
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource AppBackgroundBrush}">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="{DynamicResource AppAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceHoverBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Header -->
+            <RowDefinition Height="*"/>    <!-- Main Content Tabs -->
+            <RowDefinition Height="Auto"/> <!-- Status Bar -->
+        </Grid.RowDefinitions>
+
+        <!-- TOP BAR -->
+        <Border Grid.Row="0" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="20,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="🛡️" FontSize="24" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="גיבוי מאובטח ואפס-ידע" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                        <TextBlock Text="הצפנה מקומית XChaCha20-Poly1305 ומפתחות בלעדיים למשתמש" FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="🌓 ערכת נושא"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding ToggleThemeCommand}"
+                            AutomationProperties.Name="החלף ערכת נושא תצוגה"
+                            Margin="5,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- MAIN TABS -->
+        <TabControl Grid.Row="1"
+                    SelectedIndex="{Binding SelectedTabIndex}"
+                    BorderThickness="0"
+                    Background="Transparent"
+                    Margin="16,10,16,10">
+
+            <!-- TAB 1: STATUS & BACKUP -->
+            <TabItem Header="_1. סטטוס וגיבוי" FontSize="14" FontWeight="SemiBold" AutomationProperties.Name="לשונית סטטוס וגיבוי">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,15,0,0" MaxWidth="720" HorizontalAlignment="Center">
+                        <!-- Protection State Card -->
+                        <Border Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Ellipse Width="48" Height="48" Fill="{DynamicResource AppSuccessBrush}" VerticalAlignment="Top" Margin="0,4,16,0"/>
+
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding StatusTitle}" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding StatusSubtitle}" FontSize="13" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,4,0,12"/>
+
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="מוגן לאחרונה:" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                            <TextBlock Text="{Binding LastBackupText}" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="סה&quot;כ קבצים:" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                            <TextBlock Text="{Binding TotalFilesCount}" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="נפח גיבוי:" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                            <TextBlock Text="{Binding TotalSizeFormatted}" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Live Progress Section (Visible when busy) -->
+                        <Border Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppAccentBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,16"
+                                Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="הפעולה מתבצעת כעת..." FontWeight="Bold" FontSize="14" Foreground="{DynamicResource AppAccentBrush}"/>
+                                <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="8" Margin="0,10,0,8"/>
+                                <Grid>
+                                    <TextBlock Text="{Binding CurrentProgressItem}" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Left" TextTrimming="CharacterEllipsis" MaxWidth="400"/>
+                                    <TextBlock Text="{Binding ProgressSummary}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Button Content="בטל פעולה"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Command="{Binding CancelOperationCommand}"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,12,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Action Button -->
+                        <Button Content="🚀 הפעל גיבוי עכשיו"
+                                Command="{Binding TriggerBackupCommand}"
+                                FontSize="16"
+                                Padding="24,12"
+                                HorizontalAlignment="Center"
+                                Margin="0,10,0,0"
+                                AutomationProperties.Name="כפתור הפעלת גיבוי עכשיו"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 2: BROWSE & SEARCH -->
+            <TabItem Header="_2. עיון וחיפוש" FontSize="14" FontWeight="SemiBold" AutomationProperties.Name="לשונית עיון וחיפוש קבצים">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                 Padding="10,8"
+                                 FontSize="13"
+                                 Background="{DynamicResource AppSurfaceBrush}"
+                                 Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                 BorderBrush="{DynamicResource AppBorderBrush}"
+                                 AutomationProperties.Name="תיבת חיפוש קבצים"/>
+                        <TextBlock Grid.Column="0" Text="🔍 חפש לפי שם קובץ או נתיב..."
+                                   FontSize="13"
+                                   Foreground="{DynamicResource AppTextSecondaryBrush}"
+                                   IsHitTestVisible="False"
+                                   Margin="12,8,0,0"
+                                   Visibility="{Binding SearchQuery.Length, Converter={StaticResource BoolToVis}}"/>
+                    </Grid>
+
+                    <ListView Grid.Row="1"
+                              ItemsSource="{Binding BrowsedFiles}"
+                              SelectedItem="{Binding SelectedFile}"
+                              Background="{DynamicResource AppSurfaceBrush}"
+                              BorderBrush="{DynamicResource AppBorderBrush}"
+                              Foreground="{DynamicResource AppTextPrimaryBrush}"
+                              AutomationProperties.Name="רשימת קבצים מגובים">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="נתיב הקובץ" Width="400" DisplayMemberBinding="{Binding FormattedPath}"/>
+                                <GridViewColumn Header="גודל" Width="100" DisplayMemberBinding="{Binding FormattedSize}"/>
+                                <GridViewColumn Header="תאריך שינוי" Width="150" DisplayMemberBinding="{Binding FormattedDate}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 3: RESTORE -->
+            <TabItem Header="_3. שחזור נתונים" FontSize="14" FontWeight="SemiBold" AutomationProperties.Name="לשונית שחזור נתונים">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,15,0,0" MaxWidth="720" HorizontalAlignment="Center">
+                        <Border Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="שחזור נתונים מאומת (Disaster Recovery)" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <TextBlock Text="כל הקבצים מורדים מהאחסון המרוחק, מוודאים אותנטיות ב-Poly1305 וחותמת זמן מקורית." FontSize="13" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,4,0,16"/>
+
+                                <TextBlock Text="תיקיית יעד לשחזור:" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,0,6"/>
+                                <TextBox Text="{Binding RestoreDestination, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="10,8"
+                                         FontSize="13"
+                                         Background="{DynamicResource AppSurfaceBrush}"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                         BorderBrush="{DynamicResource AppBorderBrush}"
+                                         AutomationProperties.Name="נתיב תיקיית יעד לשחזור"
+                                         Margin="0,0,0,16"/>
+
+                                <TextBlock Text="מדיניות התנגשות קבצים:" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,0,6"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                    <RadioButton Content="דרוס קבצים קיימים" IsChecked="True" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,20,0"/>
+                                    <RadioButton Content="שנה שם לקובץ קיים" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,20,0"/>
+                                    <RadioButton Content="דלג על קבצים קיימים" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                </StackPanel>
+
+                                <CheckBox Content="שחזר חותמות זמן מקוריות (תאריך יצירה ושינוי)"
+                                          IsChecked="{Binding RestoreTimestamps}"
+                                          Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                          Margin="0,0,0,20"/>
+
+                                <Button Content="📥 התחל שחזור מלא עכשיו"
+                                        Command="{Binding TriggerRestoreCommand}"
+                                        FontSize="15"
+                                        Padding="20,10"
+                                        HorizontalAlignment="Center"
+                                        AutomationProperties.Name="כפתור התחל שחזור מלא"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 4: SETTINGS -->
+            <TabItem Header="_4. הגדרות" FontSize="14" FontWeight="SemiBold" AutomationProperties.Name="לשונית הגדרות">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,15,0,0" MaxWidth="720" HorizontalAlignment="Center">
+                        <!-- Included Roots -->
+                        <Border Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="תיקיות מיועדות לגיבוי" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <TextBlock Text="כל התיקיות והקבצים תחת נתיבים אלו ייכללו בסריקה ובגיבוי המוצפן." FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,4,0,12"/>
+
+                                <ItemsControl ItemsSource="{Binding IncludedRoots}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource AppSurfaceHoverBrush}" CornerRadius="4" Padding="10,6" Margin="0,0,0,6">
+                                                <Grid>
+                                                    <TextBlock Text="{Binding}" Foreground="{DynamicResource AppTextPrimaryBrush}" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding NewRootPath, UpdateSourceTrigger=PropertyChanged}"
+                                             Padding="8,6" FontSize="12"
+                                             Background="{DynamicResource AppSurfaceBrush}"
+                                             Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                             BorderBrush="{DynamicResource AppBorderBrush}"
+                                             AutomationProperties.Name="נתיב תיקייה חדשה להוספה"/>
+                                    <Button Grid.Column="1" Content="הוסף תיקייה" Command="{Binding AddFolderCommand}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Margin="8,0,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Storage Account -->
+                        <Border Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="חשבון אחסון מרוחק (טלגרם מאובטח)" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <TextBlock Text="טוקן הבווט וה-Chat ID מוצפנים ונשמרים ב-Windows DPAPI המאובטח." FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,4,0,12"/>
+
+                                <TextBlock Text="Bot Token:" FontSize="12" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding TelegramBotToken, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="8,6" FontSize="12"
+                                         Background="{DynamicResource AppSurfaceBrush}"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                         BorderBrush="{DynamicResource AppBorderBrush}"
+                                         AutomationProperties.Name="טוקן בוט טלגרם"
+                                         Margin="0,0,0,10"/>
+
+                                <TextBlock Text="Chat ID:" FontSize="12" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding TelegramChatId, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="8,6" FontSize="12"
+                                         Background="{DynamicResource AppSurfaceBrush}"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                         BorderBrush="{DynamicResource AppBorderBrush}"
+                                         AutomationProperties.Name="מזהה צ'אט טלגרם"
+                                         Margin="0,0,0,12"/>
+
+                                <Button Content="בדוק חיבור שרת"
+                                        Command="{Binding TestTelegramConnectionCommand}"
+                                        Style="{StaticResource SecondaryButton}"
+                                        HorizontalAlignment="Left"/>
+                                <TextBlock Text="{Binding SettingsStatusMessage}" FontSize="12" Foreground="{DynamicResource AppAccentBrush}" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <!-- STATUS BAR -->
+        <Border Grid.Row="2" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="16,6">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="8" Height="8" Fill="{DynamicResource AppSuccessBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="מצב מערכת: אפס-ידע פעיל | מחובר" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="v1.0.0-beta" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
