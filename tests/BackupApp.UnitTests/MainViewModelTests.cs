@@ -84,13 +84,7 @@ public class MainViewModelTests : IDisposable
 
         // 2. Trigger Backup via UI Command
         vm.TriggerBackupCommand.CanExecute(null).Should().BeTrue();
-        vm.TriggerBackupCommand.Execute(null);
-
-        // Wait for async command execution
-        for (int i = 0; i < 50 && vm.IsBusy; i++)
-        {
-            await Task.Delay(50);
-        }
+        await ((AsyncRelayCommand)vm.TriggerBackupCommand).ExecuteAsync(null);
 
         vm.Status.Should().Be(ProtectionState.Protected);
         vm.StatusTitle.Should().Contain("הושלם");
@@ -106,12 +100,7 @@ public class MainViewModelTests : IDisposable
 
         // 4. Trigger Restore via UI Command
         vm.TriggerRestoreCommand.CanExecute(null).Should().BeTrue();
-        vm.TriggerRestoreCommand.Execute(null);
-
-        for (int i = 0; i < 50 && vm.IsBusy; i++)
-        {
-            await Task.Delay(50);
-        }
+        await ((AsyncRelayCommand)vm.TriggerRestoreCommand).ExecuteAsync(null);
 
         vm.Status.Should().Be(ProtectionState.Protected);
         vm.StatusTitle.Should().Contain("הושלם");
@@ -206,5 +195,52 @@ public class MainViewModelTests : IDisposable
         vm.TelegramChatId.Should().Be("SAVED_CHAT");
         vm.StorageProvider.Should().BeSameAs(mockStorage);
         vm.SettingsStatusMessage.Should().Contain("נטענו בהצלחה");
+    }
+
+    [Fact]
+    public async Task MainViewModel_LoadCatalogOnInitialization_ShouldPopulateBrowsedFilesAndSupportEmptyQuery()
+    {
+        var catalog = new SqliteCatalogRepository(_catalogDbPath);
+        await catalog.InitializeAsync();
+
+        // Seed a backup set, snapshot, and file versions
+        var bsetId = BackupSetId.New();
+        var bset = new BackupSet(bsetId, "DefaultBackupSet", ["C:\\Data"], [], DateTimeOffset.UtcNow);
+        await catalog.SaveBackupSetAsync(bset);
+
+        var snap = new Snapshot(SnapshotId.New(), bsetId, 1, DateTimeOffset.UtcNow, SnapshotStatus.Committed, 2, 2048, null);
+        await catalog.CreateSnapshotAsync(snap);
+
+        var entry1 = new FileEntry(FileEntryId.New(), bsetId, snap.Id, DateTimeOffset.UtcNow);
+        var entry2 = new FileEntry(FileEntryId.New(), bsetId, snap.Id, DateTimeOffset.UtcNow);
+        var ver1 = new FileVersion(FileVersionId.New(), entry1.Id, snap.Id, CanonicalPath.From("folder/doc1.txt"), 1024, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "hash1", FileEntryAttributes.None, []);
+        var ver2 = new FileVersion(FileVersionId.New(), entry2.Id, snap.Id, CanonicalPath.From("photos/pic.jpg"), 1024, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "hash2", FileEntryAttributes.None, []);
+
+        await catalog.SaveFileEntriesAndVersionsAsync([entry1, entry2], [ver1, ver2]);
+        await catalog.CommitSnapshotAsync(snap.Id, 2, 2048);
+
+        // Now initialize MainViewModel pointing to this catalog
+        using var vm = new MainViewModel(
+            storageProvider: new InMemoryStorageProvider(),
+            catalogRepository: catalog);
+
+        await vm.InitializeAsync();
+
+        // Must be automatically loaded on startup!
+        vm.TotalFilesCount.Should().Be(2);
+        vm.BrowsedFiles.Should().HaveCount(2);
+        vm.TriggerRestoreCommand.CanExecute(null).Should().BeTrue();
+
+        // Empty search query must show all files
+        vm.SearchQuery = "";
+        vm.BrowsedFiles.Should().HaveCount(2);
+
+        // Filtered search query
+        vm.SearchQuery = "doc1";
+        vm.BrowsedFiles.Should().ContainSingle().Which.RelativePath.Should().Contain("doc1.txt");
+
+        // Back to empty search query
+        vm.SearchQuery = null!;
+        vm.BrowsedFiles.Should().HaveCount(2);
     }
 }

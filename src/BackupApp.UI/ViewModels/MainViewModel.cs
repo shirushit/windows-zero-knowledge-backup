@@ -158,10 +158,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             if (SetProperty(ref _searchQuery, value))
             {
+                OnPropertyChanged(nameof(IsSearchQueryEmpty));
                 FilterFiles();
             }
         }
     }
+
+    public bool IsSearchQueryEmpty => string.IsNullOrEmpty(_searchQuery);
 
     public ObservableCollection<FileItemViewModel> BrowsedFiles
     {
@@ -271,6 +274,34 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     public IStorageProvider StorageProvider => _storageProvider;
 
+    private static void RunOnUi(Action action)
+    {
+        if (System.Windows.Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(action);
+        }
+        else
+        {
+            action();
+        }
+    }
+
+    private static string ResolveCatalogDbPath()
+    {
+        var localAppDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BackupApp");
+        var localAppDataDb = Path.Combine(localAppDataDir, "catalog.sqlite");
+
+        var baseDirDb = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "catalog.sqlite");
+
+        if (File.Exists(baseDirDb))
+        {
+            return baseDirDb;
+        }
+
+        Directory.CreateDirectory(localAppDataDir);
+        return localAppDataDb;
+    }
+
     public MainViewModel(
         IStorageProvider? storageProvider = null,
         ICatalogRepository? catalogRepository = null,
@@ -283,7 +314,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _credentialStoreService = credentialStoreService ?? new CredentialStoreService();
         _storageFactory = storageFactory ?? (config => new TelegramStorageAdapter(config));
         _storageProvider = storageProvider ?? new InMemoryStorageProvider();
-        _catalogRepository = catalogRepository ?? new SqliteCatalogRepository(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "catalog.sqlite"));
+        _catalogRepository = catalogRepository ?? new SqliteCatalogRepository(ResolveCatalogDbPath());
         _backupOrchestrator = backupOrchestrator ?? new BackupOrchestrator();
         _restoreOrchestrator = restoreOrchestrator ?? new RestoreOrchestrator();
         _discoveryService = discoveryService ?? new RemoteCatalogDiscoveryService();
@@ -325,18 +356,68 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _unlockedMasterKey = MasterKey.Generate();
         }
 
-        // Try discovering manifests
+        // Load backed-up files from catalog or remote discovery
+        await LoadCatalogAsync().ConfigureAwait(true);
+    }
+
+    public async Task LoadCatalogAsync(CancellationToken cancellationToken = default)
+    {
         try
         {
-            var manifests = await _discoveryService.DiscoverRemoteManifestsAsync(_storageProvider, _unlockedMasterKey).ConfigureAwait(true);
-            if (manifests.Count > 0)
+            var backupSets = await _catalogRepository.ListBackupSetsAsync(cancellationToken).ConfigureAwait(true);
+            Snapshot? latestSnapshot = null;
+            BackupSetId? latestBackupSetId = null;
+
+            foreach (var bset in backupSets)
             {
-                SetCurrentManifest(manifests[0]);
+                var snap = await _catalogRepository.GetLatestCommittedSnapshotAsync(bset.Id, cancellationToken).ConfigureAwait(true);
+                if (snap != null && (latestSnapshot == null || snap.SnapshotNumber > latestSnapshot.SnapshotNumber))
+                {
+                    latestSnapshot = snap;
+                    latestBackupSetId = bset.Id;
+                }
+            }
+
+            if (latestSnapshot != null && latestBackupSetId != null)
+            {
+                var files = await _catalogRepository.GetSnapshotFilesAsync(latestSnapshot.Id, cancellationToken).ConfigureAwait(true);
+                var manifestItems = files.Select(f => new SnapshotManifestItem(
+                    Path: f.Path.Value,
+                    SizeBytes: f.SizeBytes,
+                    ContentHashSha256: f.ContentHashSha256,
+                    Attributes: (long)f.Attributes,
+                    CreatedAtUtc: f.CreatedAtUtc,
+                    ModifiedUtc: f.ModifiedUtc,
+                    ChunkIds: f.ChunkRefs.Select(c => c.Value).ToList()
+                )).ToList();
+
+                var manifest = new SnapshotManifest(
+                    BackupSetId: latestBackupSetId.Value.ToString(),
+                    SnapshotId: latestSnapshot.Id.ToString(),
+                    SnapshotNumber: latestSnapshot.SnapshotNumber,
+                    CreatedAtUtc: latestSnapshot.CreatedAtUtc,
+                    TotalFiles: latestSnapshot.TotalFiles,
+                    TotalBytes: latestSnapshot.TotalBytes,
+                    Items: manifestItems
+                );
+
+                SetCurrentManifest(manifest);
+                LastBackupText = latestSnapshot.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
+            }
+            else if (_unlockedMasterKey != null)
+            {
+                // Fallback to remote discovery if catalog has no local snapshots (e.g. disaster recovery on clean machine)
+                var manifests = await _discoveryService.DiscoverRemoteManifestsAsync(_storageProvider, _unlockedMasterKey, cancellationToken).ConfigureAwait(true);
+                if (manifests.Count > 0)
+                {
+                    SetCurrentManifest(manifests[0]);
+                    LastBackupText = manifests[0].CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
+                }
             }
         }
         catch
         {
-            // First run without backups
+            // Catalog empty or initial startup
         }
     }
 
@@ -355,9 +436,21 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             _unlockedMasterKey ??= MasterKey.Generate();
 
-            var bsetId = BackupSetId.New();
-            var backupSet = new BackupSet(bsetId, "DefaultBackupSet", IncludedRoots.ToList(), [], DateTimeOffset.UtcNow);
-            await _catalogRepository.SaveBackupSetAsync(backupSet, _currentCts.Token).ConfigureAwait(true);
+            var backupSets = await _catalogRepository.ListBackupSetsAsync(_currentCts.Token).ConfigureAwait(true);
+            var backupSet = backupSets.FirstOrDefault(b => b.Name == "DefaultBackupSet");
+            BackupSetId bsetId;
+            if (backupSet == null)
+            {
+                bsetId = BackupSetId.New();
+                backupSet = new BackupSet(bsetId, "DefaultBackupSet", IncludedRoots.ToList(), [], DateTimeOffset.UtcNow);
+                await _catalogRepository.SaveBackupSetAsync(backupSet, _currentCts.Token).ConfigureAwait(true);
+            }
+            else
+            {
+                bsetId = backupSet.Id;
+                backupSet = new BackupSet(bsetId, "DefaultBackupSet", IncludedRoots.ToList(), backupSet.ExcludedPatterns, backupSet.CreatedAtUtc);
+                await _catalogRepository.SaveBackupSetAsync(backupSet, _currentCts.Token).ConfigureAwait(true);
+            }
 
             var progressReporter = new Progress<BackupProgressReport>(report =>
             {
@@ -379,12 +472,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 cancellationToken: _currentCts.Token
             ).ConfigureAwait(true);
 
-            // Fetch and set latest manifest
-            var manifests = await _discoveryService.DiscoverRemoteManifestsAsync(_storageProvider, _unlockedMasterKey, _currentCts.Token).ConfigureAwait(true);
-            if (manifests.Count > 0)
-            {
-                SetCurrentManifest(manifests[0]);
-            }
+            // Reload catalog to refresh all backed-up files in Browse tab
+            await LoadCatalogAsync(_currentCts.Token).ConfigureAwait(true);
 
             Status = ProtectionState.Protected;
             StatusTitle = "הגיבוי הושלם בהצלחה!";
@@ -484,31 +573,39 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void SetCurrentManifest(SnapshotManifest manifest)
     {
-        _latestManifest = manifest;
-        TotalFilesCount = (int)manifest.TotalFiles;
-        TotalSizeFormatted = PathFormatter.FormatBytes(manifest.TotalBytes);
-
-        _allManifestFiles.Clear();
-        foreach (var item in manifest.Items)
+        RunOnUi(() =>
         {
-            _allManifestFiles.Add(new FileItemViewModel(item));
-        }
+            _latestManifest = manifest;
+            TotalFilesCount = (int)manifest.TotalFiles;
+            TotalSizeFormatted = PathFormatter.FormatBytes(manifest.TotalBytes);
 
-        FilterFiles();
+            _allManifestFiles.Clear();
+            foreach (var item in manifest.Items)
+            {
+                _allManifestFiles.Add(new FileItemViewModel(item));
+            }
+
+            FilterFiles();
+        });
     }
 
     private void FilterFiles()
     {
-        BrowsedFiles.Clear();
-        var query = SearchQuery.Trim();
-
-        foreach (var item in _allManifestFiles)
+        RunOnUi(() =>
         {
-            if (string.IsNullOrEmpty(query) || item.RelativePath.Contains(query, StringComparison.OrdinalIgnoreCase))
+            BrowsedFiles.Clear();
+            var query = SearchQuery?.Trim();
+
+            foreach (var item in _allManifestFiles)
             {
-                BrowsedFiles.Add(item);
+                if (string.IsNullOrEmpty(query) ||
+                    item.RelativePath.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    item.FormattedPath.Contains(query, StringComparison.OrdinalIgnoreCase))
+                {
+                    BrowsedFiles.Add(item);
+                }
             }
-        }
+        });
     }
 
     private void AddFolder()

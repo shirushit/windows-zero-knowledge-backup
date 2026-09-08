@@ -85,13 +85,7 @@ public class Gate6VerificationTests : IDisposable
         viewModel.IsBusy.Should().BeFalse();
 
         // Run backup through UI command
-        viewModel.TriggerBackupCommand.Execute(null);
-
-        // Await background execution
-        for (int i = 0; i < 60 && viewModel.IsBusy; i++)
-        {
-            await Task.Delay(50);
-        }
+        await ((AsyncRelayCommand)viewModel.TriggerBackupCommand).ExecuteAsync(null);
 
         // Verify truthful completed status
         viewModel.IsBusy.Should().BeFalse();
@@ -118,12 +112,7 @@ public class Gate6VerificationTests : IDisposable
         // STEP 5: EXECUTE RESTORE VIA UI VIEWMODEL (NO CLI)
         // -------------------------------------------------------------
         viewModel.TriggerRestoreCommand.CanExecute(null).Should().BeTrue();
-        viewModel.TriggerRestoreCommand.Execute(null);
-
-        for (int i = 0; i < 60 && viewModel.IsBusy; i++)
-        {
-            await Task.Delay(50);
-        }
+        await ((AsyncRelayCommand)viewModel.TriggerRestoreCommand).ExecuteAsync(null);
 
         viewModel.IsBusy.Should().BeFalse();
         viewModel.Status.Should().Be(ProtectionState.Protected);

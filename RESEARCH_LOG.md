@@ -321,6 +321,26 @@ Problems: Resolved line endings with dotnet format.
 Decisions: Used DPAPI for local credential protection with graceful fallback and clear Hebrew status reporting.
 Next: Merge to main and push to GitHub origin.
 
+### 2026-09-09 02:12 +03:00 — Fix: Automatic Catalog Loading on Startup & Dispatcher Synchronization
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: fix/browse-search-catalog-loading
+Commit: pending
+Plan item: UI Browse & Search Tab, Local Catalog Loading, UI Thread Synchronization
+Completed:
+- Implemented `LoadCatalogAsync` in `MainViewModel` to automatically query `_catalogRepository` on startup (`InitializeAsync` / `Window.Loaded`) and immediately populate `BrowsedFiles` with all backed-up files from the latest committed snapshot.
+- Ensured `RunBackupAsync` refreshes the local catalog immediately upon backup completion.
+- Reused existing `DefaultBackupSet` in catalog to ensure incremental snapshot history is preserved.
+- Added `RunOnUi` dispatcher invocation to `SetCurrentManifest` and `FilterFiles` so collection modifications always execute on the WPF UI thread.
+- Added `IsSearchQueryEmpty` property to fix watermark binding without WPF converter type errors.
+- Verified that empty/whitespace search query displays all backed-up files by default.
+- Added unit tests in `MainViewModelTests` and updated `Gate6VerificationTests`.
+Changed: src/BackupApp.UI/MainWindow.xaml, src/BackupApp.UI/ViewModels/MainViewModel.cs, tests/BackupApp.UnitTests/Gate6VerificationTests.cs, tests/BackupApp.UnitTests/MainViewModelTests.cs, RESEARCH_LOG.md.
+Tests/build: `dotnet build -c Release` clean (0 warnings, 0 errors); `dotnet test -c Release` passed (138/138 tests passed across UnitTests and CryptoTests); `dotnet format --verify-no-changes` passed; standalone EXE repackaged to ZIP.
+Security review: Zero-knowledge invariants preserved; local catalog reads authenticated data.
+Problems: Resolved async void race condition in UI command testing by awaiting `ExecuteAsync`.
+Decisions: Prioritized loading from local SQLite catalog for instant offline UI responsiveness, with automatic fallback to remote discovery.
+Next: Merge fix to main and push to origin.
+
 
 
 
