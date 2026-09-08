@@ -193,7 +193,7 @@
                                    Foreground="{DynamicResource AppTextSecondaryBrush}"
                                    IsHitTestVisible="False"
                                    Margin="12,8,0,0"
-                                   Visibility="{Binding SearchQuery.Length, Converter={StaticResource BoolToVis}}"/>
+                                   Visibility="{Binding IsSearchQueryEmpty, Converter={StaticResource BoolToVis}}"/>
                     </Grid>
 
                     <ListView Grid.Row="1"
