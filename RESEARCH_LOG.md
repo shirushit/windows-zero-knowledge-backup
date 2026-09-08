@@ -358,3 +358,23 @@ Security review: Zero-knowledge client-side encryption preserved; open file acce
 Problems: Fixed stream position reset on retries so retry uploads don't write zero-length bodies.
 Decisions: Supported both HTTP header and Telegram response body rate limit fields for robust 429 handling.
 Next: Commit to feat/hardening-locked-files-and-retry, merge to main, push to origin, and rebuild release standalone package.
+
+### 2026-09-09 03:00 +03:00 — Feature: Folder management, system folder picker dialog, and instant config persistence
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/ui-settings-folder-management
+Commit: pending
+Plan item: Settings Tab UX: Folder removal button, system folder picker dialog (OpenFolderDialog), and catalog configuration persistence
+Completed:
+- Added `IFolderPickerService` and `WindowsFolderPickerService` wrapping WPF .NET 8 `Microsoft.Win32.OpenFolderDialog`.
+- Added individual red delete button ("✕ הסר") next to each root in the Settings backup folders list.
+- Implemented `BrowseFolderCommand` and `BrowseRestoreDestinationCommand` providing native system folder selection dialogs for backup folders and restore destination.
+- Implemented instant configuration persistence (`PersistRootsConfigurationAsync`) updating SQLite `DefaultBackupSet` whenever folders are added or removed.
+- Enhanced `InitializeAsync` to load existing persisted backup roots from SQLite catalog on application startup.
+- Handled duplicate roots and whitespace inputs with clear Hebrew status messaging.
+- Added comprehensive unit tests in `MainViewModelTests` covering browsing, selection removal, parameter removal, duplicate rejection, and catalog reload.
+Changed: src/BackupApp.UI/Services/IFolderPickerService.cs, src/BackupApp.UI/Services/WindowsFolderPickerService.cs, src/BackupApp.UI/ViewModels/MainViewModel.cs, src/BackupApp.UI/MainWindow.xaml, tests/BackupApp.UnitTests/MainViewModelTests.cs, RESEARCH_LOG.md.
+Tests/build: `dotnet build -c Release` clean; `dotnet test BackupApp.sln -c Release` (145/145 passed); `dotnet format --verify-no-changes` clean.
+Security review: Path traversal defenses preserved; folder selection confined to client-side configuration.
+Problems: None.
+Decisions: Abstracted folder picker behind `IFolderPickerService` to keep `MainViewModel` 100% unit-testable without modal dialog popups during automated tests.
+Next: Commit to feat/ui-settings-folder-management, merge to main, push to origin, and rebuild release package.

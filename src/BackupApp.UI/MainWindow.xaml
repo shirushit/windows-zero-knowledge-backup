@@ -229,14 +229,26 @@
                                 <TextBlock Text="כל הקבצים מורדים מהאחסון המרוחק, מוודאים אותנטיות ב-Poly1305 וחותמת זמן מקורית." FontSize="13" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,4,0,16"/>
 
                                 <TextBlock Text="תיקיית יעד לשחזור:" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,0,6"/>
-                                <TextBox Text="{Binding RestoreDestination, UpdateSourceTrigger=PropertyChanged}"
-                                         Padding="10,8"
-                                         FontSize="13"
-                                         Background="{DynamicResource AppSurfaceBrush}"
-                                         Foreground="{DynamicResource AppTextPrimaryBrush}"
-                                         BorderBrush="{DynamicResource AppBorderBrush}"
-                                         AutomationProperties.Name="נתיב תיקיית יעד לשחזור"
-                                         Margin="0,0,0,16"/>
+                                <Grid Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding RestoreDestination, UpdateSourceTrigger=PropertyChanged}"
+                                             Padding="10,8"
+                                             FontSize="13"
+                                             Background="{DynamicResource AppSurfaceBrush}"
+                                             Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                             BorderBrush="{DynamicResource AppBorderBrush}"
+                                             AutomationProperties.Name="נתיב תיקיית יעד לשחזור"
+                                             VerticalContentAlignment="Center"/>
+                                    <Button Grid.Column="1" Content="📁 עיון..." Command="{Binding BrowseRestoreDestinationCommand}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            AutomationProperties.Name="עיון לבחירת תיקיית יעד לשחזור"
+                                            ToolTip="בחר תיקיית יעד לשחזור באמצעות חלון המערכת"
+                                            Margin="8,0,0,0"
+                                            Padding="16,8"/>
+                                </Grid>
 
                                 <TextBlock Text="מדיניות התנגשות קבצים:" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,0,6"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
@@ -280,9 +292,42 @@
                                 <ItemsControl ItemsSource="{Binding IncludedRoots}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Background="{DynamicResource AppSurfaceHoverBrush}" CornerRadius="4" Padding="10,6" Margin="0,0,0,6">
+                                            <Border Background="{DynamicResource AppSurfaceHoverBrush}" CornerRadius="6" Padding="12,8" Margin="0,0,0,6">
                                                 <Grid>
-                                                    <TextBlock Text="{Binding}" Foreground="{DynamicResource AppTextPrimaryBrush}" VerticalAlignment="Center"/>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding}"
+                                                               Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding}"
+                                                               FlowDirection="LeftToRight"
+                                                               HorizontalAlignment="Left"
+                                                               FontSize="13"/>
+                                                    <Button Grid.Column="1"
+                                                            Content="✕ הסר"
+                                                            ToolTip="הסר תיקייה זו מרשימת הגיבוי"
+                                                            AutomationProperties.Name="הסר תיקייה"
+                                                            Command="{Binding DataContext.RemoveFolderCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            Background="#1AEF4444"
+                                                            Foreground="#DC2626"
+                                                            BorderBrush="#DC2626"
+                                                            BorderThickness="1"
+                                                            Padding="10,4"
+                                                            FontSize="12"
+                                                            FontWeight="SemiBold"
+                                                            Cursor="Hand"
+                                                            Margin="10,0,0,0">
+                                                        <Button.Resources>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="CornerRadius" Value="4"/>
+                                                            </Style>
+                                                        </Button.Resources>
+                                                    </Button>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
@@ -293,17 +338,28 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBox Grid.Column="0" Text="{Binding NewRootPath, UpdateSourceTrigger=PropertyChanged}"
                                              Padding="8,6" FontSize="12"
                                              Background="{DynamicResource AppSurfaceBrush}"
                                              Foreground="{DynamicResource AppTextPrimaryBrush}"
                                              BorderBrush="{DynamicResource AppBorderBrush}"
-                                             AutomationProperties.Name="נתיב תיקייה חדשה להוספה"/>
-                                    <Button Grid.Column="1" Content="הוסף תיקייה" Command="{Binding AddFolderCommand}"
+                                             AutomationProperties.Name="נתיב תיקייה חדשה להוספה"
+                                             VerticalContentAlignment="Center"/>
+                                    <Button Grid.Column="1" Content="📁 עיון..." Command="{Binding BrowseFolderCommand}"
                                             Style="{StaticResource SecondaryButton}"
-                                            Margin="8,0,0,0"/>
+                                            AutomationProperties.Name="עיון לבחירת תיקייה"
+                                            ToolTip="בחר תיקייה לגיבוי באמצעות חלון המערכת"
+                                            Margin="8,0,0,0"
+                                            Padding="14,6"/>
+                                    <Button Grid.Column="2" Content="הוסף תיקייה" Command="{Binding AddFolderCommand}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            AutomationProperties.Name="הוסף תיקייה לרשימה"
+                                            Margin="8,0,0,0"
+                                            Padding="14,6"/>
                                 </Grid>
+                                <TextBlock Text="{Binding SettingsStatusMessage}" FontSize="12" Foreground="{DynamicResource AppAccentBrush}" Margin="0,8,0,0"/>
                             </StackPanel>
                         </Border>
 
