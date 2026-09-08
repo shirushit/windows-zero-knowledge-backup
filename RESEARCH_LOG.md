@@ -341,16 +341,20 @@ Problems: Resolved async void race condition in UI command testing by awaiting `
 Decisions: Prioritized loading from local SQLite catalog for instant offline UI responsiveness, with automatic fallback to remote discovery.
 Next: Merge fix to main and push to origin.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+### 2026-09-09 02:35 +03:00 — Hardening: Locked/in-use files, Telegram rate-limit retries, and dry-run E2E verification
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/hardening-locked-files-and-retry
+Commit: pending
+Plan item: Robustness Hardening: In-use file handling, Telegram 429 backoff, Unicode canonical paths, E2E Dry-run verification
+Completed:
+- Enhanced `IBackupOrchestrator` file reader to open files with `FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete` and buffered chunk streams, preventing failures when files are concurrently open in other applications.
+- Updated `TelegramStorageAdapter`: added `ParseRetryAfterAsync` inspecting both standard HTTP `Retry-After` headers and Telegram JSON `parameters.retry_after`; added automatic rewind (`contentStream.Position = 0`) on retry; enforced 3-attempt exponential backoff for HTTP 429 and transient transport failures on both PUT and GET.
+- Verified recursive directory scanner and canonical path normalization for deep folders, Hebrew filenames, and special characters.
+- Created comprehensive end-to-end dry-run verification test suite (`EndToEndBackupRestoreVerificationTests`) exercising active locked files, Hebrew filenames, special symbols, 0-byte files, and binary payloads, verifying 100% SHA-256 byte identity on full and partial restore.
+- Verified restore SHA-256 hash checks protect against chunk tampering or transport corruption.
+Changed: src/BackupApp.BackupEngine/IBackupOrchestrator.cs, src/BackupApp.Storage.Telegram/TelegramStorageAdapter.cs, tests/BackupApp.UnitTests/EndToEndBackupRestoreVerificationTests.cs, RESEARCH_LOG.md.
+Tests/build: `dotnet build -c Release` clean; `dotnet test BackupApp.sln -c Release` (139/139 passed); `dotnet format --verify-no-changes` clean.
+Security review: Zero-knowledge client-side encryption preserved; open file access strictly read-only with non-exclusive shares; integrity verified with SHA-256 before disk writes.
+Problems: Fixed stream position reset on retries so retry uploads don't write zero-length bodies.
+Decisions: Supported both HTTP header and Telegram response body rate limit fields for robust 429 handling.
+Next: Commit to feat/hardening-locked-files-and-retry, merge to main, push to origin, and rebuild release standalone package.

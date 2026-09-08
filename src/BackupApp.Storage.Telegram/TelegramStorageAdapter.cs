@@ -73,6 +73,11 @@ public sealed class TelegramStorageAdapter : IStorageProvider
 
         return await _retryPolicy.ExecuteWithRetryAsync(async ct =>
         {
+            if (contentStream.CanSeek)
+            {
+                contentStream.Position = 0;
+            }
+
             using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             using var trackedStream = new ProgressAndHashingStream(contentStream, sha, progress);
 
@@ -93,7 +98,7 @@ public sealed class TelegramStorageAdapter : IStorageProvider
 
             if ((int)response.StatusCode == 429)
             {
-                var retryAfter = ParseRetryAfter(response);
+                var retryAfter = await ParseRetryAfterAsync(response).ConfigureAwait(false);
                 throw new RateLimitException("Telegram API rate limit exceeded.", retryAfter);
             }
 
@@ -145,7 +150,7 @@ public sealed class TelegramStorageAdapter : IStorageProvider
 
             if ((int)getFileResponse.StatusCode == 429)
             {
-                var retryAfter = ParseRetryAfter(getFileResponse);
+                var retryAfter = await ParseRetryAfterAsync(getFileResponse).ConfigureAwait(false);
                 throw new RateLimitException("Telegram API rate limit exceeded.", retryAfter);
             }
 
@@ -157,6 +162,13 @@ public sealed class TelegramStorageAdapter : IStorageProvider
             // 2. Download file content stream
             var downloadUrl = $"{_config.ApiBaseUrl}/file/bot{_config.BotToken}/{filePath}";
             var downloadResponse = await _httpClient.GetAsync(new Uri(downloadUrl), HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+
+            if ((int)downloadResponse.StatusCode == 429)
+            {
+                var retryAfter = await ParseRetryAfterAsync(downloadResponse).ConfigureAwait(false);
+                throw new RateLimitException("Telegram API rate limit exceeded during download.", retryAfter);
+            }
+
             downloadResponse.EnsureSuccessStatusCode();
 
             return await downloadResponse.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -242,7 +254,7 @@ public sealed class TelegramStorageAdapter : IStorageProvider
             ?? throw new HttpRequestException("Telegram response missing file_path.");
     }
 
-    private static TimeSpan? ParseRetryAfter(HttpResponseMessage response)
+    private static async Task<TimeSpan?> ParseRetryAfterAsync(HttpResponseMessage response)
     {
         if (response.Headers.TryGetValues("Retry-After", out var values))
         {
@@ -252,6 +264,22 @@ public sealed class TelegramStorageAdapter : IStorageProvider
                 return TimeSpan.FromSeconds(seconds);
             }
         }
+
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var node = JsonNode.Parse(body);
+            var retryAfterSec = node?["parameters"]?["retry_after"]?.GetValue<int>();
+            if (retryAfterSec.HasValue && retryAfterSec.Value > 0)
+            {
+                return TimeSpan.FromSeconds(retryAfterSec.Value);
+            }
+        }
+        catch
+        {
+            // Ignore parse errors on body
+        }
+
         return null;
     }
 

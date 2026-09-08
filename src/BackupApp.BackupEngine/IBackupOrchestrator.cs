@@ -239,60 +239,88 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
                 var chunkList = new List<StoredChunk>();
                 var chunkIds = new List<ObjectId>();
 
-                byte[] fileBytes = await File.ReadAllBytesAsync(discovered.AbsolutePath, cancellationToken).ConfigureAwait(false);
-                int currentChunkOffset = 0;
-
-                foreach (var chunkDesc in captureResult.Chunks)
+                FileStream fileStream;
+                try
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    fileStream = new FileStream(
+                        discovered.AbsolutePath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.ReadWrite | FileShare.Delete,
+                        bufferSize: 64 * 1024,
+                        useAsync: true);
+                }
+                catch (IOException) when (options.SkipLockedFiles)
+                {
+                    continue;
+                }
+                catch (UnauthorizedAccessException) when (options.SkipLockedFiles)
+                {
+                    continue;
+                }
 
-                    var chunkLen = (int)chunkDesc.SizeBytes;
-                    var chunkData = new byte[chunkLen];
-                    Array.Copy(fileBytes, currentChunkOffset, chunkData, 0, chunkLen);
-                    currentChunkOffset += chunkLen;
-
-                    // Check deduplication in catalog / remote storage
-                    var existingRef = await catalogRepository.GetRemoteObjectRefAsync(chunkDesc.Id, storageProvider.ProviderId, cancellationToken).ConfigureAwait(false);
-
-                    if (existingRef == null)
+                await using (fileStream.ConfigureAwait(false))
+                {
+                    foreach (var chunkDesc in captureResult.Chunks)
                     {
-                        // Encrypt chunk using ContentKey
-                        var aad = Encoding.UTF8.GetBytes($"chunk:{chunkDesc.Id.Value}");
-                        var envelope = _crypto.Encrypt(chunkData, contentKey, aad);
-                        var envelopeBytes = envelope.ToBytes();
+                        cancellationToken.ThrowIfCancellationRequested();
 
-                        using var uploadStream = new MemoryStream(envelopeBytes);
-                        var descriptor = await storageProvider.PutObjectAsync(
-                            chunkDesc.Id,
-                            uploadStream,
-                            progress: null,
-                            cancellationToken: cancellationToken
-                        ).ConfigureAwait(false);
-
-                        var remoteRef = new RemoteObjectRef(
-                            ObjectId: chunkDesc.Id,
-                            ProviderId: storageProvider.ProviderId,
-                            RemoteIdentifier: descriptor.ProviderReference ?? chunkDesc.Id.Value,
-                            UploadedAtUtc: DateTimeOffset.UtcNow,
-                            IsVerified: true
-                        );
-                        await catalogRepository.SaveRemoteObjectRefAsync(remoteRef, cancellationToken).ConfigureAwait(false);
-
-                        if (options.ThrottleDelayMs > 0)
+                        var chunkLen = (int)chunkDesc.SizeBytes;
+                        var chunkData = new byte[chunkLen];
+                        int chunkBytesRead = 0;
+                        while (chunkBytesRead < chunkLen)
                         {
-                            await Task.Delay(options.ThrottleDelayMs, cancellationToken).ConfigureAwait(false);
+                            int bytesRead = await fileStream.ReadAsync(chunkData.AsMemory(chunkBytesRead, chunkLen - chunkBytesRead), cancellationToken).ConfigureAwait(false);
+                            if (bytesRead == 0)
+                            {
+                                break;
+                            }
+                            chunkBytesRead += bytesRead;
                         }
-                    }
 
-                    var storedChunk = new StoredChunk(
-                        Id: chunkDesc.Id,
-                        PlaintextSizeBytes: chunkDesc.SizeBytes,
-                        PlaintextSha256: chunkDesc.PlaintextSha256,
-                        EncryptedSizeBytes: chunkDesc.SizeBytes + EncryptedEnvelope.HeaderLength + 16,
-                        EncryptedSha256: chunkDesc.PlaintextSha256
-                    );
-                    chunkList.Add(storedChunk);
-                    chunkIds.Add(chunkDesc.Id);
+                        // Check deduplication in catalog / remote storage
+                        var existingRef = await catalogRepository.GetRemoteObjectRefAsync(chunkDesc.Id, storageProvider.ProviderId, cancellationToken).ConfigureAwait(false);
+
+                        if (existingRef == null)
+                        {
+                            // Encrypt chunk using ContentKey
+                            var aad = Encoding.UTF8.GetBytes($"chunk:{chunkDesc.Id.Value}");
+                            var envelope = _crypto.Encrypt(chunkData, contentKey, aad);
+                            var envelopeBytes = envelope.ToBytes();
+
+                            using var uploadStream = new MemoryStream(envelopeBytes);
+                            var descriptor = await storageProvider.PutObjectAsync(
+                                chunkDesc.Id,
+                                uploadStream,
+                                progress: null,
+                                cancellationToken: cancellationToken
+                            ).ConfigureAwait(false);
+
+                            var remoteRef = new RemoteObjectRef(
+                                ObjectId: chunkDesc.Id,
+                                ProviderId: storageProvider.ProviderId,
+                                RemoteIdentifier: descriptor.ProviderReference ?? chunkDesc.Id.Value,
+                                UploadedAtUtc: DateTimeOffset.UtcNow,
+                                IsVerified: true
+                            );
+                            await catalogRepository.SaveRemoteObjectRefAsync(remoteRef, cancellationToken).ConfigureAwait(false);
+
+                            if (options.ThrottleDelayMs > 0)
+                            {
+                                await Task.Delay(options.ThrottleDelayMs, cancellationToken).ConfigureAwait(false);
+                            }
+                        }
+
+                        var storedChunk = new StoredChunk(
+                            Id: chunkDesc.Id,
+                            PlaintextSizeBytes: chunkDesc.SizeBytes,
+                            PlaintextSha256: chunkDesc.PlaintextSha256,
+                            EncryptedSizeBytes: chunkDesc.SizeBytes + EncryptedEnvelope.HeaderLength + 16,
+                            EncryptedSha256: chunkDesc.PlaintextSha256
+                        );
+                        chunkList.Add(storedChunk);
+                        chunkIds.Add(chunkDesc.Id);
+                    }
                 }
 
                 await catalogRepository.SaveChunksAsync(chunkList, cancellationToken).ConfigureAwait(false);
