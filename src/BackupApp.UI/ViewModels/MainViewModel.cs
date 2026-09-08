@@ -75,6 +75,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     // Settings
     private ObservableCollection<string> _includedRoots = [];
     private string _newRootPath = string.Empty;
+    private string? _selectedRootPath;
     private string _telegramBotToken = string.Empty;
     private string _telegramChatId = string.Empty;
     private string _settingsStatusMessage = string.Empty;
@@ -208,6 +209,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         set => SetProperty(ref _newRootPath, value);
     }
 
+    public string? SelectedRootPath
+    {
+        get => _selectedRootPath;
+        set => SetProperty(ref _selectedRootPath, value);
+    }
+
     public string TelegramBotToken
     {
         get => _telegramBotToken;
@@ -256,6 +263,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand TriggerRestoreCommand { get; }
     public ICommand AddFolderCommand { get; }
     public ICommand RemoveFolderCommand { get; }
+    public ICommand BrowseFolderCommand { get; }
+    public ICommand BrowseRestoreDestinationCommand { get; }
     public ICommand TestTelegramConnectionCommand { get; }
     public ICommand ToggleThemeCommand { get; }
     public ICommand GenerateRecoveryKeyCommand { get; }
@@ -271,6 +280,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly IRemoteCatalogDiscoveryService _discoveryService;
     private readonly ICredentialStoreService _credentialStoreService;
     private readonly Func<TelegramStorageConfiguration, IStorageProvider> _storageFactory;
+    private readonly IFolderPickerService _folderPickerService;
 
     public IStorageProvider StorageProvider => _storageProvider;
 
@@ -309,7 +319,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         IRestoreOrchestrator? restoreOrchestrator = null,
         IRemoteCatalogDiscoveryService? discoveryService = null,
         ICredentialStoreService? credentialStoreService = null,
-        Func<TelegramStorageConfiguration, IStorageProvider>? storageFactory = null)
+        Func<TelegramStorageConfiguration, IStorageProvider>? storageFactory = null,
+        IFolderPickerService? folderPickerService = null)
     {
         _credentialStoreService = credentialStoreService ?? new CredentialStoreService();
         _storageFactory = storageFactory ?? (config => new TelegramStorageAdapter(config));
@@ -318,12 +329,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _backupOrchestrator = backupOrchestrator ?? new BackupOrchestrator();
         _restoreOrchestrator = restoreOrchestrator ?? new RestoreOrchestrator();
         _discoveryService = discoveryService ?? new RemoteCatalogDiscoveryService();
+        _folderPickerService = folderPickerService ?? new WindowsFolderPickerService();
 
         TriggerBackupCommand = new AsyncRelayCommand(RunBackupAsync, () => !IsBusy);
         CancelOperationCommand = new RelayCommand(CancelOperation, () => IsBusy);
         TriggerRestoreCommand = new AsyncRelayCommand(RunRestoreAsync, () => !IsBusy && _latestManifest != null);
         AddFolderCommand = new RelayCommand(AddFolder);
         RemoveFolderCommand = new RelayCommand(RemoveFolder);
+        BrowseFolderCommand = new RelayCommand(BrowseFolder);
+        BrowseRestoreDestinationCommand = new RelayCommand(BrowseRestoreDestination);
         TestTelegramConnectionCommand = new AsyncRelayCommand(TestTelegramConnectionAsync);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
         GenerateRecoveryKeyCommand = new RelayCommand(GenerateRecoveryKey);
@@ -338,6 +352,18 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public async Task InitializeAsync()
     {
         await _catalogRepository.InitializeAsync().ConfigureAwait(true);
+
+        // Load saved backup roots from catalog if present
+        var backupSets = await _catalogRepository.ListBackupSetsAsync().ConfigureAwait(true);
+        var defaultSet = backupSets.FirstOrDefault(b => b.Name == "DefaultBackupSet");
+        if (defaultSet != null && defaultSet.IncludedRoots != null && defaultSet.IncludedRoots.Count > 0)
+        {
+            IncludedRoots.Clear();
+            foreach (var r in defaultSet.IncludedRoots)
+            {
+                IncludedRoots.Add(r);
+            }
+        }
 
         // Load saved Telegram credentials if present
         var savedCreds = _credentialStoreService.LoadTelegramCredentials();
@@ -610,18 +636,82 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void AddFolder()
     {
-        if (!string.IsNullOrWhiteSpace(NewRootPath) && !IncludedRoots.Contains(NewRootPath))
+        if (string.IsNullOrWhiteSpace(NewRootPath))
         {
-            IncludedRoots.Add(NewRootPath);
-            NewRootPath = string.Empty;
+            return;
         }
+
+        var folder = NewRootPath.Trim();
+        if (IncludedRoots.Contains(folder))
+        {
+            SettingsStatusMessage = "תיקייה זו כבר קיימת ברשימת הגיבוי.";
+            return;
+        }
+
+        IncludedRoots.Add(folder);
+        NewRootPath = string.Empty;
+        SettingsStatusMessage = $"התיקייה נוספה בהצלחה: {PathFormatter.FormatForRtl(folder)}";
+        _ = PersistRootsConfigurationAsync();
     }
 
     private void RemoveFolder(object? parameter)
     {
-        if (parameter is string path)
+        var path = parameter as string ?? SelectedRootPath;
+        if (!string.IsNullOrWhiteSpace(path))
         {
-            IncludedRoots.Remove(path);
+            if (IncludedRoots.Remove(path))
+            {
+                if (SelectedRootPath == path)
+                {
+                    SelectedRootPath = null;
+                }
+                SettingsStatusMessage = $"התיקייה הוסרה בהצלחה: {PathFormatter.FormatForRtl(path)}";
+                _ = PersistRootsConfigurationAsync();
+            }
+        }
+    }
+
+    private void BrowseFolder()
+    {
+        var initialDir = Directory.Exists(NewRootPath) ? NewRootPath : null;
+        var folder = _folderPickerService.PickFolder(initialDir);
+        if (!string.IsNullOrWhiteSpace(folder))
+        {
+            NewRootPath = folder;
+            AddFolder();
+        }
+    }
+
+    private void BrowseRestoreDestination()
+    {
+        var initialDir = Directory.Exists(RestoreDestination) ? RestoreDestination : null;
+        var folder = _folderPickerService.PickFolder(initialDir);
+        if (!string.IsNullOrWhiteSpace(folder))
+        {
+            RestoreDestination = folder;
+        }
+    }
+
+    public async Task PersistRootsConfigurationAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var backupSets = await _catalogRepository.ListBackupSetsAsync(cancellationToken).ConfigureAwait(false);
+            var backupSet = backupSets.FirstOrDefault(b => b.Name == "DefaultBackupSet");
+            if (backupSet == null)
+            {
+                var bsetId = BackupSetId.New();
+                backupSet = new BackupSet(bsetId, "DefaultBackupSet", IncludedRoots.ToList(), [], DateTimeOffset.UtcNow);
+            }
+            else
+            {
+                backupSet = new BackupSet(backupSet.Id, "DefaultBackupSet", IncludedRoots.ToList(), backupSet.ExcludedPatterns, backupSet.CreatedAtUtc);
+            }
+            await _catalogRepository.SaveBackupSetAsync(backupSet, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to persist backup roots configuration: {ex.Message}");
         }
     }
 

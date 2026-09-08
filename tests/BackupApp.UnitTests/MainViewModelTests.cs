@@ -243,4 +243,142 @@ public class MainViewModelTests : IDisposable
         vm.SearchQuery = null!;
         vm.BrowsedFiles.Should().HaveCount(2);
     }
+
+    [Fact]
+    public void MainViewModel_BrowseFolder_ShouldPickFolderAndAddToList()
+    {
+        var mockPicker = new MockFolderPickerService(@"C:\Users\Alice\Projects");
+        using var vm = new MainViewModel(folderPickerService: mockPicker);
+        vm.IncludedRoots.Clear();
+
+        vm.BrowseFolderCommand.Execute(null);
+
+        vm.IncludedRoots.Should().ContainSingle().Which.Should().Be(@"C:\Users\Alice\Projects");
+        vm.SettingsStatusMessage.Should().Contain("נוספה בהצלחה");
+    }
+
+    [Fact]
+    public void MainViewModel_BrowseFolder_WhenCanceled_ShouldNotModifyList()
+    {
+        var mockPicker = new MockFolderPickerService(null);
+        using var vm = new MainViewModel(folderPickerService: mockPicker);
+        vm.IncludedRoots.Clear();
+
+        vm.BrowseFolderCommand.Execute(null);
+
+        vm.IncludedRoots.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void MainViewModel_AddFolder_ShouldRejectDuplicatesAndWhitespace()
+    {
+        using var vm = new MainViewModel();
+        vm.IncludedRoots.Clear();
+        vm.NewRootPath = @"C:\Folder1";
+        vm.AddFolderCommand.Execute(null);
+
+        vm.IncludedRoots.Should().HaveCount(1);
+
+        // Attempt duplicate
+        vm.NewRootPath = @"C:\Folder1";
+        vm.AddFolderCommand.Execute(null);
+        vm.IncludedRoots.Should().HaveCount(1);
+        vm.SettingsStatusMessage.Should().Contain("כבר קיימת");
+
+        // Attempt whitespace
+        vm.NewRootPath = "   ";
+        vm.AddFolderCommand.Execute(null);
+        vm.IncludedRoots.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void MainViewModel_RemoveFolder_ByParameterOrSelection_ShouldRemoveProperly()
+    {
+        using var vm = new MainViewModel();
+        vm.IncludedRoots.Clear();
+        vm.IncludedRoots.Add(@"C:\FolderA");
+        vm.IncludedRoots.Add(@"C:\FolderB");
+
+        // Remove by selection
+        vm.SelectedRootPath = @"C:\FolderA";
+        vm.RemoveFolderCommand.Execute(null);
+
+        vm.IncludedRoots.Should().ContainSingle().Which.Should().Be(@"C:\FolderB");
+        vm.SelectedRootPath.Should().BeNull();
+        vm.SettingsStatusMessage.Should().Contain("הוסרה בהצלחה");
+
+        // Remove by parameter
+        vm.RemoveFolderCommand.Execute(@"C:\FolderB");
+        vm.IncludedRoots.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void MainViewModel_BrowseRestoreDestination_ShouldUpdateDestination()
+    {
+        var mockPicker = new MockFolderPickerService(@"D:\RestoredData");
+        using var vm = new MainViewModel(folderPickerService: mockPicker);
+
+        vm.BrowseRestoreDestinationCommand.Execute(null);
+
+        vm.RestoreDestination.Should().Be(@"D:\RestoredData");
+    }
+
+    [Fact]
+    public async Task MainViewModel_FolderManagement_ShouldPersistAndReloadFromCatalog()
+    {
+        var catalog = new SqliteCatalogRepository(_catalogDbPath);
+        await catalog.InitializeAsync();
+
+        using (var vm1 = new MainViewModel(catalogRepository: catalog))
+        {
+            await vm1.InitializeAsync();
+            vm1.IncludedRoots.Clear();
+            vm1.NewRootPath = @"C:\PersistedFolder1";
+            vm1.AddFolderCommand.Execute(null);
+            vm1.NewRootPath = @"C:\PersistedFolder2";
+            vm1.AddFolderCommand.Execute(null);
+
+            // Wait brief moment for async persist
+            await vm1.PersistRootsConfigurationAsync();
+        }
+
+        // Initialize a new VM instance on the same catalog
+        using (var vm2 = new MainViewModel(catalogRepository: catalog))
+        {
+            await vm2.InitializeAsync();
+
+            vm2.IncludedRoots.Should().HaveCount(2);
+            vm2.IncludedRoots.Should().Contain(@"C:\PersistedFolder1");
+            vm2.IncludedRoots.Should().Contain(@"C:\PersistedFolder2");
+
+            // Now remove one folder
+            vm2.RemoveFolderCommand.Execute(@"C:\PersistedFolder1");
+            await vm2.PersistRootsConfigurationAsync();
+        }
+
+        // Initialize a third VM instance to verify deletion persisted
+        using (var vm3 = new MainViewModel(catalogRepository: catalog))
+        {
+            await vm3.InitializeAsync();
+
+            vm3.IncludedRoots.Should().ContainSingle().Which.Should().Be(@"C:\PersistedFolder2");
+        }
+    }
+}
+
+public class MockFolderPickerService : IFolderPickerService
+{
+    public string? SelectedFolder { get; set; }
+    public string? LastInitialDirectory { get; private set; }
+
+    public MockFolderPickerService(string? selectedFolder = null)
+    {
+        SelectedFolder = selectedFolder;
+    }
+
+    public string? PickFolder(string? initialDirectory = null)
+    {
+        LastInitialDirectory = initialDirectory;
+        return SelectedFolder;
+    }
 }
