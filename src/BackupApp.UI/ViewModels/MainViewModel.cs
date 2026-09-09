@@ -71,6 +71,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private string _restoreDestination = string.Empty;
     private RestoreConflictResolution _conflictResolution = RestoreConflictResolution.Overwrite;
     private bool _restoreTimestamps = true;
+    private bool _isRestoreCompleted;
+    private string _restoreStatusMessage = string.Empty;
+    private bool _hasRestoreError;
 
     // Settings
     private ObservableCollection<string> _includedRoots = [];
@@ -197,6 +200,32 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         set => SetProperty(ref _restoreTimestamps, value);
     }
 
+    public bool IsRestoreCompleted
+    {
+        get => _isRestoreCompleted;
+        set => SetProperty(ref _isRestoreCompleted, value);
+    }
+
+    public string RestoreStatusMessage
+    {
+        get => _restoreStatusMessage;
+        set
+        {
+            if (SetProperty(ref _restoreStatusMessage, value))
+            {
+                OnPropertyChanged(nameof(HasRestoreStatusMessage));
+            }
+        }
+    }
+
+    public bool HasRestoreStatusMessage => !string.IsNullOrWhiteSpace(_restoreStatusMessage);
+
+    public bool HasRestoreError
+    {
+        get => _hasRestoreError;
+        set => SetProperty(ref _hasRestoreError, value);
+    }
+
     public ObservableCollection<string> IncludedRoots
     {
         get => _includedRoots;
@@ -261,6 +290,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand TriggerBackupCommand { get; }
     public ICommand CancelOperationCommand { get; }
     public ICommand TriggerRestoreCommand { get; }
+    public ICommand OpenRestoreFolderCommand { get; }
+    public ICommand OpenSelectedFileCommand { get; }
+    public ICommand RestoreSingleFileCommand { get; }
+    public ICommand ShowFileInFolderCommand { get; }
     public ICommand AddFolderCommand { get; }
     public ICommand RemoveFolderCommand { get; }
     public ICommand BrowseFolderCommand { get; }
@@ -281,6 +314,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly ICredentialStoreService _credentialStoreService;
     private readonly Func<TelegramStorageConfiguration, IStorageProvider> _storageFactory;
     private readonly IFolderPickerService _folderPickerService;
+    private readonly IProcessLauncher _processLauncher;
 
     public IStorageProvider StorageProvider => _storageProvider;
 
@@ -320,7 +354,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         IRemoteCatalogDiscoveryService? discoveryService = null,
         ICredentialStoreService? credentialStoreService = null,
         Func<TelegramStorageConfiguration, IStorageProvider>? storageFactory = null,
-        IFolderPickerService? folderPickerService = null)
+        IFolderPickerService? folderPickerService = null,
+        IProcessLauncher? processLauncher = null)
     {
         _credentialStoreService = credentialStoreService ?? new CredentialStoreService();
         _storageFactory = storageFactory ?? (config => new TelegramStorageAdapter(config));
@@ -330,10 +365,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _restoreOrchestrator = restoreOrchestrator ?? new RestoreOrchestrator();
         _discoveryService = discoveryService ?? new RemoteCatalogDiscoveryService();
         _folderPickerService = folderPickerService ?? new WindowsFolderPickerService();
+        _processLauncher = processLauncher ?? new WindowsProcessLauncher();
 
         TriggerBackupCommand = new AsyncRelayCommand(RunBackupAsync, () => !IsBusy);
         CancelOperationCommand = new RelayCommand(CancelOperation, () => IsBusy);
         TriggerRestoreCommand = new AsyncRelayCommand(RunRestoreAsync, () => !IsBusy && _latestManifest != null);
+        OpenRestoreFolderCommand = new RelayCommand(OpenRestoreFolder);
+        OpenSelectedFileCommand = new AsyncRelayCommand(OpenSelectedFileAsync);
+        RestoreSingleFileCommand = new AsyncRelayCommand(RestoreSingleFileAsync);
+        ShowFileInFolderCommand = new RelayCommand(ShowFileInFolder);
         AddFolderCommand = new RelayCommand(AddFolder);
         RemoveFolderCommand = new RelayCommand(RemoveFolder);
         BrowseFolderCommand = new RelayCommand(BrowseFolder);
@@ -533,7 +573,32 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        var dest = string.IsNullOrWhiteSpace(RestoreDestination)
+            ? Path.Combine(Path.GetTempPath(), "BackupAppRestore")
+            : RestoreDestination.Trim();
+        RestoreDestination = dest;
+
+        try
+        {
+            if (!Directory.Exists(dest))
+            {
+                Directory.CreateDirectory(dest);
+            }
+        }
+        catch (Exception ex)
+        {
+            Status = ProtectionState.Error;
+            StatusTitle = "שגיאת הרשאות ביצירת תיקיית יעד";
+            StatusSubtitle = $"לא ניתן ליצור את תיקיית היעד: {ex.Message}";
+            RestoreStatusMessage = $"שגיאת הרשאות ביצירת התיקייה '{dest}': {ex.Message}";
+            HasRestoreError = true;
+            return;
+        }
+
         IsBusy = true;
+        IsRestoreCompleted = false;
+        HasRestoreError = false;
+        RestoreStatusMessage = string.Empty;
         Status = ProtectionState.Restoring;
         StatusTitle = "משחזר נתונים...";
         StatusSubtitle = "הקבצים מורדים מהאחסון, מאומתים ומשוחזרים לדיסק";
@@ -556,7 +621,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 {
                     ProgressPercent = Math.Round((double)report.FilesProcessed / report.TotalFiles * 100, 1);
                 }
-                ProgressSummary = $"{report.FilesProcessed} מתוך {report.TotalFiles} קבצים שוחזרו ({PathFormatter.FormatBytes(report.BytesProcessed)})";
+                var phaseText = string.IsNullOrEmpty(report.CurrentPhase) ? string.Empty : $" [{report.CurrentPhase}]";
+                ProgressSummary = $"{report.FilesProcessed} מתוך {report.TotalFiles} קבצים שוחזרו ({PathFormatter.FormatBytes(report.BytesProcessed)}){phaseText}";
             });
 
             await _restoreOrchestrator.RestoreAllAsync(
@@ -568,27 +634,255 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 cancellationToken: _currentCts.Token
             ).ConfigureAwait(true);
 
+            IsRestoreCompleted = true;
+            HasRestoreError = false;
             Status = ProtectionState.Protected;
             StatusTitle = "השחזור הושלם בהצלחה!";
             StatusSubtitle = $"הקבצים שוחזרו אל {PathFormatter.FormatForRtl(RestoreDestination)}";
+            RestoreStatusMessage = $"כל הקבצים שוחזרו בהצלחה ואומתו ב-SHA-256 אל: {RestoreDestination}";
         }
         catch (OperationCanceledException)
         {
             Status = ProtectionState.Warning;
             StatusTitle = "השחזור בוטל";
             StatusSubtitle = "הפעולה הופסקה על ידי המשתמש";
+            RestoreStatusMessage = "פעולת השחזור הופסקה על ידי המשתמש.";
+            HasRestoreError = true;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Status = ProtectionState.Error;
+            StatusTitle = "שגיאת הרשאות בשחזור";
+            StatusSubtitle = "אין הרשאת כתיבה לתיקיית היעד. בחר תיקייה אחרת או הפעל כמנהל.";
+            RestoreStatusMessage = $"שגיאת הרשאות: {ex.Message}";
+            HasRestoreError = true;
+        }
+        catch (CryptographicException ex)
+        {
+            Status = ProtectionState.Error;
+            StatusTitle = "שגיאת פענוח / שלמות נתונים";
+            StatusSubtitle = "פענוח XChaCha20 או אימות שלמות SHA-256 נכשל על אחד המקטעים.";
+            RestoreStatusMessage = $"שגיאת פענוח: {ex.Message}";
+            HasRestoreError = true;
+        }
+        catch (KeyNotFoundException ex)
+        {
+            Status = ProtectionState.Error;
+            StatusTitle = "מקטע לא נמצא בטלגרם";
+            StatusSubtitle = "אחד המקטעים המוצפנים לא נמצא באחסון הטלגרם.";
+            RestoreStatusMessage = $"שגיאת מקור נתונים: {ex.Message}";
+            HasRestoreError = true;
+        }
+        catch (HttpRequestException ex)
+        {
+            Status = ProtectionState.Error;
+            StatusTitle = "שגיאת תקשורת עם טלגרם";
+            StatusSubtitle = "נכשל ניסיון הורדת המקטע המוצפן מהערוץ (ייתכן ניתוק רשת או בעיית שרת).";
+            RestoreStatusMessage = $"שגיאת רשת/אחסון: {ex.Message}";
+            HasRestoreError = true;
         }
         catch (Exception ex)
         {
             Status = ProtectionState.Error;
             StatusTitle = "שגיאה בשחזור";
             StatusSubtitle = ex.Message;
+            RestoreStatusMessage = $"שגיאה בשחזור: {ex.Message}";
+            HasRestoreError = true;
         }
         finally
         {
             IsBusy = false;
             _currentCts?.Dispose();
             _currentCts = null;
+        }
+    }
+
+    public void OpenRestoreFolder()
+    {
+        var dest = string.IsNullOrWhiteSpace(RestoreDestination)
+            ? Path.Combine(Path.GetTempPath(), "BackupAppRestore")
+            : RestoreDestination.Trim();
+
+        if (Directory.Exists(dest))
+        {
+            _processLauncher.Start(dest);
+        }
+    }
+
+    public async Task OpenSelectedFileAsync(object? parameter = null)
+    {
+        var fileItem = parameter as FileItemViewModel ?? SelectedFile;
+        if (fileItem == null || _latestManifest == null || _unlockedMasterKey == null)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        Status = ProtectionState.Restoring;
+        StatusTitle = "משחזר קובץ לצפייה...";
+        StatusSubtitle = $"מפענח את {fileItem.FormattedPath}";
+        ProgressPercent = 0;
+
+        try
+        {
+            var previewDir = Path.Combine(Path.GetTempPath(), "BackupAppPreview");
+            if (!Directory.Exists(previewDir))
+            {
+                Directory.CreateDirectory(previewDir);
+            }
+
+            var options = new RestoreOptions(
+                DestinationRootPath: previewDir,
+                ConflictResolution: RestoreConflictResolution.Overwrite,
+                RestoreTimestamps: true
+            );
+
+            var progressReporter = new Progress<RestoreProgressReport>(report =>
+            {
+                CurrentProgressItem = PathFormatter.FormatForRtl(report.CurrentFileName);
+                var phaseText = string.IsNullOrEmpty(report.CurrentPhase) ? string.Empty : $" [{report.CurrentPhase}]";
+                ProgressSummary = $"{phaseText}";
+            });
+
+            await _restoreOrchestrator.RestoreFileAsync(
+                _latestManifest,
+                fileItem.RelativePath,
+                _unlockedMasterKey,
+                _storageProvider,
+                options,
+                progress: progressReporter
+            ).ConfigureAwait(true);
+
+            var targetPath = RestoreOrchestrator.ValidateAndResolveTargetPath(previewDir, fileItem.RelativePath);
+
+            Status = ProtectionState.Protected;
+            StatusTitle = "הקובץ שוחזר ונפתח!";
+            StatusSubtitle = targetPath;
+
+            _processLauncher.Start(targetPath);
+        }
+        catch (Exception ex)
+        {
+            Status = ProtectionState.Error;
+            StatusTitle = "שגיאה בפתיחת הקובץ";
+            StatusSubtitle = ex.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    public async Task RestoreSingleFileAsync(object? parameter = null)
+    {
+        var fileItem = parameter as FileItemViewModel ?? SelectedFile;
+        if (fileItem == null || _latestManifest == null || _unlockedMasterKey == null)
+        {
+            return;
+        }
+
+        var dest = string.IsNullOrWhiteSpace(RestoreDestination)
+            ? Path.Combine(Path.GetTempPath(), "BackupAppRestore")
+            : RestoreDestination.Trim();
+        RestoreDestination = dest;
+
+        if (!Directory.Exists(dest))
+        {
+            Directory.CreateDirectory(dest);
+        }
+
+        IsBusy = true;
+        Status = ProtectionState.Restoring;
+        StatusTitle = "משחזר קובץ יחיד...";
+        StatusSubtitle = $"משחזר את {fileItem.FormattedPath}";
+        ProgressPercent = 0;
+
+        try
+        {
+            var options = new RestoreOptions(
+                DestinationRootPath: dest,
+                ConflictResolution: ConflictResolution,
+                RestoreTimestamps: RestoreTimestamps
+            );
+
+            await _restoreOrchestrator.RestoreFileAsync(
+                _latestManifest,
+                fileItem.RelativePath,
+                _unlockedMasterKey,
+                _storageProvider,
+                options
+            ).ConfigureAwait(true);
+
+            var targetPath = RestoreOrchestrator.ValidateAndResolveTargetPath(dest, fileItem.RelativePath);
+
+            IsRestoreCompleted = true;
+            HasRestoreError = false;
+            Status = ProtectionState.Protected;
+            StatusTitle = "הקובץ שוחזר בהצלחה!";
+            StatusSubtitle = targetPath;
+            RestoreStatusMessage = $"הקובץ שוחזר בהצלחה אל: {targetPath}";
+        }
+        catch (Exception ex)
+        {
+            Status = ProtectionState.Error;
+            StatusTitle = "שגיאה בשחזור הקובץ";
+            StatusSubtitle = ex.Message;
+            RestoreStatusMessage = $"שגיאה בשחזור הקובץ: {ex.Message}";
+            HasRestoreError = true;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    public void ShowFileInFolder(object? parameter = null)
+    {
+        var fileItem = parameter as FileItemViewModel ?? SelectedFile;
+        if (fileItem == null)
+        {
+            return;
+        }
+
+        // 1. Check if restored in preview directory
+        var previewPath = Path.Combine(Path.GetTempPath(), "BackupAppPreview", fileItem.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+        if (File.Exists(previewPath))
+        {
+            _processLauncher.Start("explorer.exe", $"/select,\"{previewPath}\"");
+            return;
+        }
+
+        // 2. Check if restored in RestoreDestination
+        if (!string.IsNullOrWhiteSpace(RestoreDestination))
+        {
+            var restorePath = Path.Combine(RestoreDestination, fileItem.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(restorePath))
+            {
+                _processLauncher.Start("explorer.exe", $"/select,\"{restorePath}\"");
+                return;
+            }
+        }
+
+        // 3. Check if exists in any included roots (local original)
+        foreach (var root in IncludedRoots)
+        {
+            var localPath = Path.Combine(root, fileItem.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(localPath))
+            {
+                _processLauncher.Start("explorer.exe", $"/select,\"{localPath}\"");
+                return;
+            }
+        }
+
+        // 4. Fallback: if restore destination exists, open it
+        if (!string.IsNullOrWhiteSpace(RestoreDestination) && Directory.Exists(RestoreDestination))
+        {
+            _processLauncher.Start(RestoreDestination);
+        }
+        else
+        {
+            StatusTitle = "הקובץ עדיין לא שוחזר לדיסק";
+            StatusSubtitle = "השתמש ב'פתח קובץ' או 'שחזר קובץ זה' כדי לשחזרו תחילה.";
         }
     }
 

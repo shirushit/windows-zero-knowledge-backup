@@ -150,7 +150,7 @@ public class Gate5VerificationTests : IDisposable
             progress
         );
 
-        progressReportCount.Should().Be(3);
+        progressReportCount.Should().BeGreaterThanOrEqualTo(3);
 
         // -------------------------------------------------------------
         // STEP 5: VERIFY INTEGRITY, HASHES, AND METADATA

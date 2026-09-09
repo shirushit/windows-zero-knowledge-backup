@@ -26,7 +26,8 @@ public sealed record RestoreProgressReport(
     int FilesProcessed,
     long TotalBytes,
     long BytesProcessed,
-    string? CurrentFileName
+    string? CurrentFileName,
+    string? CurrentPhase = null
 );
 
 public interface IRestoreOrchestrator
@@ -37,6 +38,7 @@ public interface IRestoreOrchestrator
         MasterKey masterKey,
         IStorageProvider storageProvider,
         RestoreOptions options,
+        IProgress<RestoreProgressReport>? progress = null,
         CancellationToken cancellationToken = default
     );
 
@@ -86,6 +88,7 @@ public sealed class RestoreOrchestrator : IRestoreOrchestrator
         MasterKey masterKey,
         IStorageProvider storageProvider,
         RestoreOptions options,
+        IProgress<RestoreProgressReport>? progress = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(manifest);
@@ -101,7 +104,8 @@ public sealed class RestoreOrchestrator : IRestoreOrchestrator
         var contentKey = masterKey.DeriveContentKey();
         try
         {
-            await RestoreItemInternalAsync(item, contentKey, storageProvider, options, cancellationToken).ConfigureAwait(false);
+            await RestoreItemInternalAsync(item, contentKey, storageProvider, options, progress, 1, 0, item.SizeBytes, 0, cancellationToken).ConfigureAwait(false);
+            progress?.Report(new RestoreProgressReport(1, 1, item.SizeBytes, item.SizeBytes, item.Path, "הושלם"));
         }
         finally
         {
@@ -180,11 +184,11 @@ public sealed class RestoreOrchestrator : IRestoreOrchestrator
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await RestoreItemInternalAsync(item, contentKey, storageProvider, options, cancellationToken).ConfigureAwait(false);
+            await RestoreItemInternalAsync(item, contentKey, storageProvider, options, progress, items.Count, filesProcessed, totalBytes, bytesProcessed, cancellationToken).ConfigureAwait(false);
 
             filesProcessed++;
             bytesProcessed += item.SizeBytes;
-            progress?.Report(new RestoreProgressReport(items.Count, filesProcessed, totalBytes, bytesProcessed, item.Path));
+            progress?.Report(new RestoreProgressReport(items.Count, filesProcessed, totalBytes, bytesProcessed, item.Path, "הושלם"));
         }
     }
 
@@ -193,8 +197,18 @@ public sealed class RestoreOrchestrator : IRestoreOrchestrator
         byte[] contentKey,
         IStorageProvider storageProvider,
         RestoreOptions options,
+        IProgress<RestoreProgressReport>? progress,
+        int totalFiles,
+        int filesProcessed,
+        long totalBytes,
+        long bytesProcessed,
         CancellationToken cancellationToken)
     {
+        if (!Directory.Exists(options.DestinationRootPath))
+        {
+            Directory.CreateDirectory(options.DestinationRootPath);
+        }
+
         var targetPath = ValidateAndResolveTargetPath(options.DestinationRootPath, item.Path);
 
         if (File.Exists(targetPath))
@@ -222,10 +236,20 @@ public sealed class RestoreOrchestrator : IRestoreOrchestrator
         {
             await using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
-                foreach (var chunkIdStr in item.ChunkIds)
+                for (int i = 0; i < item.ChunkIds.Count; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    var chunkIdStr = item.ChunkIds[i];
                     var chunkId = ObjectId.FromHex(chunkIdStr);
+
+                    progress?.Report(new RestoreProgressReport(
+                        totalFiles,
+                        filesProcessed,
+                        totalBytes,
+                        bytesProcessed,
+                        item.Path,
+                        $"הורדת מקטע {i + 1}/{item.ChunkIds.Count} מטלגרם..."
+                    ));
 
                     await using var chunkStream = await _retryPolicy.ExecuteWithRetryAsync(
                         ct => storageProvider.GetObjectAsync(chunkId, ct),
@@ -236,6 +260,15 @@ public sealed class RestoreOrchestrator : IRestoreOrchestrator
                     await chunkStream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
                     var chunkBytes = ms.ToArray();
 
+                    progress?.Report(new RestoreProgressReport(
+                        totalFiles,
+                        filesProcessed,
+                        totalBytes,
+                        bytesProcessed,
+                        item.Path,
+                        "פענוח מקטע ב-XChaCha20-Poly1305..."
+                    ));
+
                     var aad = Encoding.UTF8.GetBytes($"chunk:{chunkId.Value}");
                     var plaintext = _crypto.Decrypt(chunkBytes, contentKey, aad);
 
@@ -244,6 +277,15 @@ public sealed class RestoreOrchestrator : IRestoreOrchestrator
             }
 
             // Verify content hash integrity
+            progress?.Report(new RestoreProgressReport(
+                totalFiles,
+                filesProcessed,
+                totalBytes,
+                bytesProcessed,
+                item.Path,
+                "אימות שלמות SHA-256 וכתיבה לדיסק..."
+            ));
+
             string computedHash;
             await using (var verifyStream = File.OpenRead(tempPath))
             {
