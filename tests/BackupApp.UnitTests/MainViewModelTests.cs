@@ -364,6 +364,149 @@ public class MainViewModelTests : IDisposable
             vm3.IncludedRoots.Should().ContainSingle().Which.Should().Be(@"C:\PersistedFolder2");
         }
     }
+    [Fact]
+    public async Task MainViewModel_OpenSelectedFile_ShouldRestoreToPreviewAndLaunchProcess()
+    {
+        var file1 = Path.Combine(_sourceDir, "document.txt");
+        await File.WriteAllTextAsync(file1, "Preview Content 2026");
+
+        var storage = new InMemoryStorageProvider();
+        var catalog = new SqliteCatalogRepository(_catalogDbPath);
+        var mockLauncher = new MockProcessLauncher();
+
+        using var vm = new MainViewModel(
+            storageProvider: storage,
+            catalogRepository: catalog,
+            processLauncher: mockLauncher);
+
+        vm.IncludedRoots.Clear();
+        vm.IncludedRoots.Add(_sourceDir);
+        await vm.InitializeAsync();
+
+        // Run backup first so we have a manifest and master key
+        await ((AsyncRelayCommand)vm.TriggerBackupCommand).ExecuteAsync(null);
+        vm.BrowsedFiles.Should().NotBeEmpty();
+
+        var selected = vm.BrowsedFiles.First(f => f.RelativePath.Contains("document.txt"));
+        vm.SelectedFile = selected;
+
+        // Execute OpenSelectedFileCommand
+        await ((AsyncRelayCommand)vm.OpenSelectedFileCommand).ExecuteAsync(selected);
+
+        mockLauncher.LaunchedFiles.Should().ContainSingle();
+        var launched = mockLauncher.LaunchedFiles[0];
+        launched.Should().Contain("BackupAppPreview");
+        File.Exists(launched).Should().BeTrue();
+        (await File.ReadAllTextAsync(launched)).Should().Be("Preview Content 2026");
+    }
+
+    [Fact]
+    public async Task MainViewModel_RestoreSingleFile_ShouldRestoreToDestinationAndReportSuccess()
+    {
+        var file1 = Path.Combine(_sourceDir, "single_restore.txt");
+        await File.WriteAllTextAsync(file1, "Single Restore Content");
+
+        var storage = new InMemoryStorageProvider();
+        var catalog = new SqliteCatalogRepository(_catalogDbPath);
+        var mockLauncher = new MockProcessLauncher();
+
+        using var vm = new MainViewModel(
+            storageProvider: storage,
+            catalogRepository: catalog,
+            processLauncher: mockLauncher)
+        {
+            RestoreDestination = _restoreDir
+        };
+
+        vm.IncludedRoots.Clear();
+        vm.IncludedRoots.Add(_sourceDir);
+        await vm.InitializeAsync();
+
+        await ((AsyncRelayCommand)vm.TriggerBackupCommand).ExecuteAsync(null);
+
+        var item = vm.BrowsedFiles.First(f => f.RelativePath.Contains("single_restore.txt"));
+        await ((AsyncRelayCommand)vm.RestoreSingleFileCommand).ExecuteAsync(item);
+
+        vm.IsRestoreCompleted.Should().BeTrue();
+        vm.HasRestoreError.Should().BeFalse();
+        vm.HasRestoreStatusMessage.Should().BeTrue();
+        vm.RestoreStatusMessage.Should().Contain("הקובץ שוחזר בהצלחה");
+
+        var restored = Path.Combine(_restoreDir, "single_restore.txt");
+        File.Exists(restored).Should().BeTrue();
+        (await File.ReadAllTextAsync(restored)).Should().Be("Single Restore Content");
+    }
+
+    [Fact]
+    public void MainViewModel_ShowFileInFolder_WhenLocalFileExists_ShouldLaunchExplorerWithSelect()
+    {
+        var mockLauncher = new MockProcessLauncher();
+        using var vm = new MainViewModel(processLauncher: mockLauncher);
+
+        var localFile = Path.Combine(_sourceDir, "existing.txt");
+        File.WriteAllText(localFile, "Test");
+
+        vm.IncludedRoots.Clear();
+        vm.IncludedRoots.Add(_sourceDir);
+
+        var manifestItem = new SnapshotManifestItem("existing.txt", 4, "hash", 0, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, []);
+        var item = new FileItemViewModel(manifestItem);
+        vm.ShowFileInFolderCommand.Execute(item);
+
+        mockLauncher.LaunchedProcesses.Should().ContainSingle();
+        var (file, args) = mockLauncher.LaunchedProcesses[0];
+        file.Should().Be("explorer.exe");
+        args.Should().Contain("/select,");
+        args.Should().Contain("existing.txt");
+    }
+
+    [Fact]
+    public void MainViewModel_OpenRestoreFolder_WhenDirectoryExists_ShouldLaunchFolder()
+    {
+        var mockLauncher = new MockProcessLauncher();
+        Directory.CreateDirectory(_restoreDir);
+
+        using var vm = new MainViewModel(processLauncher: mockLauncher)
+        {
+            RestoreDestination = _restoreDir
+        };
+
+        vm.OpenRestoreFolderCommand.Execute(null);
+
+        mockLauncher.LaunchedFiles.Should().ContainSingle().Which.Should().Be(_restoreDir);
+    }
+
+    [Fact]
+    public async Task MainViewModel_Restore_WhenDirectoryDoesNotExist_ShouldAutoCreateAndRestore()
+    {
+        var autoCreatedDir = Path.Combine(_testRoot, "auto_created_sub", "deep_restore");
+        Directory.Exists(autoCreatedDir).Should().BeFalse();
+
+        var file1 = Path.Combine(_sourceDir, "sample.txt");
+        await File.WriteAllTextAsync(file1, "Auto Created Directory Test");
+
+        var storage = new InMemoryStorageProvider();
+        var catalog = new SqliteCatalogRepository(_catalogDbPath);
+
+        using var vm = new MainViewModel(storageProvider: storage, catalogRepository: catalog)
+        {
+            RestoreDestination = autoCreatedDir
+        };
+        vm.IncludedRoots.Clear();
+        vm.IncludedRoots.Add(_sourceDir);
+
+        await vm.InitializeAsync();
+        await ((AsyncRelayCommand)vm.TriggerBackupCommand).ExecuteAsync(null);
+
+        // Execute full restore
+        await ((AsyncRelayCommand)vm.TriggerRestoreCommand).ExecuteAsync(null);
+
+        Directory.Exists(autoCreatedDir).Should().BeTrue();
+        var restoredFile = Path.Combine(autoCreatedDir, "sample.txt");
+        File.Exists(restoredFile).Should().BeTrue();
+        (await File.ReadAllTextAsync(restoredFile)).Should().Be("Auto Created Directory Test");
+        vm.IsRestoreCompleted.Should().BeTrue();
+    }
 }
 
 public class MockFolderPickerService : IFolderPickerService
@@ -380,5 +523,23 @@ public class MockFolderPickerService : IFolderPickerService
     {
         LastInitialDirectory = initialDirectory;
         return SelectedFolder;
+    }
+}
+
+public class MockProcessLauncher : IProcessLauncher
+{
+    public List<string> LaunchedFiles { get; } = [];
+    public List<(string FileName, string Arguments)> LaunchedProcesses { get; } = [];
+
+    public void Start(string fileName, string? arguments = null)
+    {
+        if (string.IsNullOrEmpty(arguments))
+        {
+            LaunchedFiles.Add(fileName);
+        }
+        else
+        {
+            LaunchedProcesses.Add((fileName, arguments));
+        }
     }
 }

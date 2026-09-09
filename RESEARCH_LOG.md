@@ -378,3 +378,26 @@ Security review: Path traversal defenses preserved; folder selection confined to
 Problems: None.
 Decisions: Abstracted folder picker behind `IFolderPickerService` to keep `MainViewModel` 100% unit-testable without modal dialog popups during automated tests.
 Next: Commit to feat/ui-settings-folder-management, merge to main, push to origin, and rebuild release package.
+
+### 2026-09-10 02:59 +03:00 — Hardening & Feature: Disaster Recovery UX, Live Progress, Error Handling, File Preview, and Context Menu Actions
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: feat/restore-hardening-and-preview
+Commit: pending
+Plan item: Disaster Recovery Hardening, Real-time Restore Progress, File Preview, and Tab 2 Context Actions
+Completed:
+- Hardened `RestoreOrchestrator` with real-time phase reporting across chunk download from Telegram, XChaCha20-Poly1305 decryption, and SHA-256 integrity verification/disk write.
+- Added comprehensive try/catch blocks in `MainViewModel.RunRestoreAsync` and `RestoreSingleFileAsync` with clear Hebrew user feedback for permission issues (`UnauthorizedAccessException`), missing remote chunks (`KeyNotFoundException`), network/transport errors (`HttpRequestException`), and integrity/decryption errors (`CryptographicException`).
+- Implemented automatic directory creation for restore destinations if they do not yet exist.
+- Added prominent "פתח תיקיית שחזור" ("Open restore folder") button upon restore completion.
+- Implemented `IProcessLauncher` and `WindowsProcessLauncher` (`UseShellExecute = true`) for launching files and opening folders in Windows Explorer.
+- Added double-click (`MouseDoubleClick` via `ListViewItem` event setter) on table rows in Tab 2 to decrypt to `%TEMP%\BackupAppPreview` and launch immediately in the default Windows application.
+- Added action toolbar in Tab 2 with buttons: "פתח קובץ", "שחזר קובץ זה", and "הצג בתיקייה".
+- Added right-click Context Menu on table rows with: "פתח קובץ (שחזר וצפה)", "הצג בתיקייה (Explorer)", and "שחזר קובץ זה לתיקיית היעד".
+- Added unit tests in `MainViewModelTests` verifying preview restoration, single file restoration, Explorer selection argument handling, and auto-directory creation.
+Changed: src/BackupApp.RestoreEngine/IRestoreOrchestrator.cs, src/BackupApp.UI/Services/IProcessLauncher.cs, src/BackupApp.UI/Services/WindowsProcessLauncher.cs, src/BackupApp.UI/ViewModels/MainViewModel.cs, src/BackupApp.UI/MainWindow.xaml, src/BackupApp.UI/MainWindow.xaml.cs, tests/BackupApp.UnitTests/MainViewModelTests.cs, tests/BackupApp.UnitTests/Gate5VerificationTests.cs, RESEARCH_LOG.md.
+Tests/build: `dotnet build BackupApp.sln -c Release` clean (0 warnings, 0 errors); `dotnet test BackupApp.sln -c Release` passed (150/150 tests passed: 27 CryptoTests, 123 UnitTests); `dotnet format BackupApp.sln --verify-no-changes` clean.
+Security review: End-to-end zero-knowledge encryption preserved; temp preview files verified with Poly1305 and SHA-256 before disk creation; Explorer selection arguments sanitized.
+Problems: Adjusted Gate5 progress report count assertion to account for fine-grained phase progress reporting during restore.
+Decisions: Decoupled process launching behind `IProcessLauncher` to ensure unit testability in headless environments without modal or shell window side-effects.
+Next: Commit to feat/restore-hardening-and-preview, merge with --no-ff into main, push to origin, and rebuild release standalone package.
+
