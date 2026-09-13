@@ -1,3 +1,5 @@
+using BackupApp.BackupEngine.Capture;
+
 namespace BackupApp.BackupEngine;
 
 public sealed record BackupEngineOptions
@@ -6,6 +8,10 @@ public sealed record BackupEngineOptions
     public int ThrottleDelayMs { get; init; }
     public int ChunkSizeBytes { get; init; } = 8 * 1024 * 1024; // 8MB default chunk size
     public bool SkipLockedFiles { get; init; } = true;
+    public bool UseFastCdc { get; init; } = true;
+    public int FastCdcMinChunkSizeBytes { get; init; } = FastCdcChunker.DefaultMinChunkSize;
+    public int FastCdcAvgChunkSizeBytes { get; init; } = FastCdcChunker.DefaultAvgChunkSize;
+    public int FastCdcMaxChunkSizeBytes { get; init; } = FastCdcChunker.DefaultMaxChunkSize;
 
     public static BackupEngineOptions Default { get; } = new();
 }

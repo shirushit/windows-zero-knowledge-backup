@@ -36,7 +36,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "Publish failed with exit code $LASTEXITCODE"
 }
 
-Write-Host "2. Generating SHA-256 Checksums..." -ForegroundColor Yellow
+Write-Host "2. Creating Release ZIP Archive..." -ForegroundColor Yellow
+$ZipPackage = Join-Path $OutputFullPath "BackupApp-v1.0.0-win-x64.zip"
+if (Test-Path $ZipPackage) { Remove-Item -Force $ZipPackage }
+Compress-Archive -Path (Join-Path $OutputFullPath "BackupApp.UI.exe") -DestinationPath $ZipPackage -Force
+
+Write-Host "3. Generating SHA-256 Checksums..." -ForegroundColor Yellow
 $ChecksumFile = Join-Path $OutputFullPath "SHA256SUMS.txt"
 $Files = Get-ChildItem -Path $OutputFullPath -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" }
 $ChecksumLines = @()
@@ -50,8 +55,15 @@ foreach ($file in $Files) {
 
 $ChecksumLines | Out-File -FilePath $ChecksumFile -Encoding utf8
 
-Write-Host "3. Generating SBOM Package Inventory..." -ForegroundColor Yellow
+Write-Host "4. Generating SBOM Package Inventory..." -ForegroundColor Yellow
 $SbomFile = Join-Path $OutputFullPath "SBOM.txt"
 dotnet list $ProjectRoot package > $SbomFile
+
+$LauncherDir = "C:\Users\owner\Desktop\BackupApp-Launcher"
+if (Test-Path $LauncherDir) {
+    Write-Host "5. Updating Desktop Launcher executable..." -ForegroundColor Yellow
+    Copy-Item -Path (Join-Path $OutputFullPath "BackupApp.UI.exe") -Destination (Join-Path $LauncherDir "BackupApp.exe") -Force
+    Write-Host "   Launcher executable updated at $LauncherDir\BackupApp.exe" -ForegroundColor Green
+}
 
 Write-Host "=== Release Packaging Completed Successfully at: $OutputFullPath ===" -ForegroundColor Green

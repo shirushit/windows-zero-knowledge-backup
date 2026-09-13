@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Channels;
 using BackupApp.BackupEngine.Capture;
 using BackupApp.BackupEngine.ChangeDetection;
 using BackupApp.BackupEngine.Scanner;
@@ -15,7 +16,10 @@ public record BackupProgressReport(
     int FilesProcessed,
     long TotalBytesScanned,
     long BytesProcessed,
-    string? CurrentFileName
+    string? CurrentFileName,
+    int UploadedFilesCount = 0,
+    int UnchangedFilesCount = 0,
+    string? StatusMessage = null
 );
 
 public interface IBackupOrchestrator
@@ -90,13 +94,31 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
 
         long totalScannedBytes = discoveredFiles.Sum(f => f.SizeBytes);
 
-        // 3. Change Detection against latest committed snapshot
+        // 3. Change Detection against latest committed snapshot and catalog
         var latestSnapshot = await catalogRepository.GetLatestCommittedSnapshotAsync(backupSetId, cancellationToken).ConfigureAwait(false);
-        IReadOnlyList<FileVersion> previousFiles = latestSnapshot != null
-            ? await catalogRepository.GetSnapshotFilesAsync(latestSnapshot.Id, cancellationToken).ConfigureAwait(false)
-            : [];
+        var previousFilesList = new List<FileVersion>();
+        if (latestSnapshot != null)
+        {
+            var snapFiles = await catalogRepository.GetSnapshotFilesAsync(latestSnapshot.Id, cancellationToken).ConfigureAwait(false);
+            previousFilesList.AddRange(snapFiles);
+        }
 
-        var changes = await _changeDetection.DetectChangesAsync(discoveredFiles, previousFiles, _capture, cancellationToken).ConfigureAwait(false);
+        // Before reading or encrypting, check catalog.sqlite for prior records of any files not in latest snapshot
+        var knownPaths = new HashSet<CanonicalPath>(previousFilesList.Select(f => f.Path));
+        foreach (var file in discoveredFiles)
+        {
+            if (!knownPaths.Contains(file.Path))
+            {
+                var latestVersion = await catalogRepository.GetLatestFileVersionAsync(backupSetId, file.Path, cancellationToken).ConfigureAwait(false);
+                if (latestVersion != null)
+                {
+                    previousFilesList.Add(latestVersion);
+                    knownPaths.Add(file.Path);
+                }
+            }
+        }
+
+        var changes = await _changeDetection.DetectChangesAsync(discoveredFiles, previousFilesList, _capture, cancellationToken).ConfigureAwait(false);
 
         // 4. Initialize Monotonic Snapshot
         long nextSnapshotNumber = latestSnapshot != null ? latestSnapshot.SnapshotNumber + 1 : 1;
@@ -127,11 +149,33 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
 
         int filesProcessed = 0;
         long bytesProcessed = 0;
+        int uploadedFilesCount = 0;
+        int unchangedFilesCount = 0;
 
         var contentKey = masterKey.DeriveContentKey();
 
         try
         {
+            if (storageProvider is IRateLimitedStorageProvider rateLimited)
+            {
+                rateLimited.OnRateLimitDelay = msg =>
+                {
+                    if (!string.IsNullOrEmpty(msg))
+                    {
+                        progress?.Report(new BackupProgressReport(
+                            discoveredFiles.Count,
+                            filesProcessed,
+                            totalScannedBytes,
+                            bytesProcessed,
+                            null,
+                            uploadedFilesCount,
+                            unchangedFilesCount,
+                            StatusMessage: msg
+                        ));
+                    }
+                };
+            }
+
             // 6. Process each change
             foreach (var change in changes)
             {
@@ -171,9 +215,10 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
                         ChunkIds: ver.ChunkRefs.Select(c => c.Value).ToList()
                     ));
 
+                    unchangedFilesCount++;
                     filesProcessed++;
                     bytesProcessed += ver.SizeBytes;
-                    progress?.Report(new BackupProgressReport(discoveredFiles.Count, filesProcessed, totalScannedBytes, bytesProcessed, ver.Path.Value));
+                    progress?.Report(new BackupProgressReport(discoveredFiles.Count, filesProcessed, totalScannedBytes, bytesProcessed, ver.Path.Value, uploadedFilesCount, unchangedFilesCount));
                     continue;
                 }
 
@@ -207,9 +252,10 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
                         ChunkIds: ver.ChunkRefs.Select(c => c.Value).ToList()
                     ));
 
+                    unchangedFilesCount++;
                     filesProcessed++;
                     bytesProcessed += ver.SizeBytes;
-                    progress?.Report(new BackupProgressReport(discoveredFiles.Count, filesProcessed, totalScannedBytes, bytesProcessed, ver.Path.Value));
+                    progress?.Report(new BackupProgressReport(discoveredFiles.Count, filesProcessed, totalScannedBytes, bytesProcessed, ver.Path.Value, uploadedFilesCount, unchangedFilesCount));
                     continue;
                 }
 
@@ -218,6 +264,7 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
                 var captureResult = await _capture.CaptureFileAsync(
                     discovered.AbsolutePath,
                     options.ChunkSizeBytes,
+                    useFastCdc: options.UseFastCdc,
                     cancellationToken: cancellationToken
                 ).ConfigureAwait(false);
 
@@ -261,56 +308,19 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
 
                 await using (fileStream.ConfigureAwait(false))
                 {
+                    await ProcessChunksPipelineAsync(
+                        fileStream,
+                        captureResult.Chunks,
+                        _crypto,
+                        contentKey,
+                        storageProvider,
+                        catalogRepository,
+                        options,
+                        cancellationToken
+                    ).ConfigureAwait(false);
+
                     foreach (var chunkDesc in captureResult.Chunks)
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        var chunkLen = (int)chunkDesc.SizeBytes;
-                        var chunkData = new byte[chunkLen];
-                        int chunkBytesRead = 0;
-                        while (chunkBytesRead < chunkLen)
-                        {
-                            int bytesRead = await fileStream.ReadAsync(chunkData.AsMemory(chunkBytesRead, chunkLen - chunkBytesRead), cancellationToken).ConfigureAwait(false);
-                            if (bytesRead == 0)
-                            {
-                                break;
-                            }
-                            chunkBytesRead += bytesRead;
-                        }
-
-                        // Check deduplication in catalog / remote storage
-                        var existingRef = await catalogRepository.GetRemoteObjectRefAsync(chunkDesc.Id, storageProvider.ProviderId, cancellationToken).ConfigureAwait(false);
-
-                        if (existingRef == null)
-                        {
-                            // Encrypt chunk using ContentKey
-                            var aad = Encoding.UTF8.GetBytes($"chunk:{chunkDesc.Id.Value}");
-                            var envelope = _crypto.Encrypt(chunkData, contentKey, aad);
-                            var envelopeBytes = envelope.ToBytes();
-
-                            using var uploadStream = new MemoryStream(envelopeBytes);
-                            var descriptor = await storageProvider.PutObjectAsync(
-                                chunkDesc.Id,
-                                uploadStream,
-                                progress: null,
-                                cancellationToken: cancellationToken
-                            ).ConfigureAwait(false);
-
-                            var remoteRef = new RemoteObjectRef(
-                                ObjectId: chunkDesc.Id,
-                                ProviderId: storageProvider.ProviderId,
-                                RemoteIdentifier: descriptor.ProviderReference ?? chunkDesc.Id.Value,
-                                UploadedAtUtc: DateTimeOffset.UtcNow,
-                                IsVerified: true
-                            );
-                            await catalogRepository.SaveRemoteObjectRefAsync(remoteRef, cancellationToken).ConfigureAwait(false);
-
-                            if (options.ThrottleDelayMs > 0)
-                            {
-                                await Task.Delay(options.ThrottleDelayMs, cancellationToken).ConfigureAwait(false);
-                            }
-                        }
-
                         var storedChunk = new StoredChunk(
                             Id: chunkDesc.Id,
                             PlaintextSizeBytes: chunkDesc.SizeBytes,
@@ -355,12 +365,16 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
                     ChunkIds: newVersion.ChunkRefs.Select(c => c.Value).ToList()
                 ));
 
+                uploadedFilesCount++;
                 filesProcessed++;
                 bytesProcessed += discovered.SizeBytes;
 
                 await catalogRepository.UpdateBackupJobProgressAsync(jobId, filesProcessed, bytesProcessed, cancellationToken).ConfigureAwait(false);
-                progress?.Report(new BackupProgressReport(discoveredFiles.Count, filesProcessed, totalScannedBytes, bytesProcessed, newVersion.Path.Value));
+                progress?.Report(new BackupProgressReport(discoveredFiles.Count, filesProcessed, totalScannedBytes, bytesProcessed, newVersion.Path.Value, uploadedFilesCount, unchangedFilesCount));
             }
+
+            // Final progress report with exact scan, upload, and unchanged counts
+            progress?.Report(new BackupProgressReport(discoveredFiles.Count, filesProcessed, totalScannedBytes, bytesProcessed, null, uploadedFilesCount, unchangedFilesCount));
 
             // 7. Save file entries and versions to local catalog atomically
             await catalogRepository.SaveFileEntriesAndVersionsAsync(entriesToSave, versionsToSave, cancellationToken).ConfigureAwait(false);
@@ -408,7 +422,155 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
         }
         finally
         {
+            if (storageProvider is IRateLimitedStorageProvider rateLimited)
+            {
+                rateLimited.OnRateLimitDelay = null;
+            }
             CryptographicOperations.ZeroMemory(contentKey);
         }
+    }
+
+    private sealed record RawChunkItem(
+        FileChunkDescriptor Descriptor,
+        byte[] Data
+    );
+
+    private sealed record EncryptedChunkItem(
+        FileChunkDescriptor Descriptor,
+        byte[]? EnvelopeBytes,
+        bool NeedsUpload
+    );
+
+    private static async Task ProcessChunksPipelineAsync(
+        Stream fileStream,
+        IReadOnlyList<FileChunkDescriptor> chunks,
+        ICryptoService crypto,
+        byte[] contentKey,
+        IStorageProvider storageProvider,
+        ICatalogRepository catalogRepository,
+        BackupEngineOptions options,
+        CancellationToken cancellationToken)
+    {
+        var readChannel = Channel.CreateBounded<RawChunkItem>(new BoundedChannelOptions(4)
+        {
+            SingleWriter = true,
+            SingleReader = true,
+            FullMode = BoundedChannelFullMode.Wait
+        });
+
+        var uploadChannel = Channel.CreateBounded<EncryptedChunkItem>(new BoundedChannelOptions(4)
+        {
+            SingleWriter = true,
+            SingleReader = true,
+            FullMode = BoundedChannelFullMode.Wait
+        });
+
+        // Reader Stage: Read raw chunk bytes from disk into readChannel
+        var readerTask = Task.Run(async () =>
+        {
+            try
+            {
+                foreach (var chunkDesc in chunks)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var chunkLen = (int)chunkDesc.SizeBytes;
+                    var chunkData = new byte[chunkLen];
+                    int chunkBytesRead = 0;
+                    while (chunkBytesRead < chunkLen)
+                    {
+                        int bytesRead = await fileStream.ReadAsync(
+                            chunkData.AsMemory(chunkBytesRead, chunkLen - chunkBytesRead),
+                            cancellationToken).ConfigureAwait(false);
+                        if (bytesRead == 0) break;
+                        chunkBytesRead += bytesRead;
+                    }
+
+                    await readChannel.Writer.WriteAsync(new RawChunkItem(chunkDesc, chunkData), cancellationToken).ConfigureAwait(false);
+                }
+                readChannel.Writer.Complete();
+            }
+            catch (Exception ex)
+            {
+                readChannel.Writer.Complete(ex);
+                throw;
+            }
+        }, cancellationToken);
+
+        // Encryptor Stage: Deduplication check & XChaCha20 encryption with zero-memory
+        var encryptorTask = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var raw in readChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    try
+                    {
+                        var existingRef = await catalogRepository.GetRemoteObjectRefAsync(
+                            raw.Descriptor.Id, storageProvider.ProviderId, cancellationToken).ConfigureAwait(false);
+
+                        if (existingRef != null)
+                        {
+                            await uploadChannel.Writer.WriteAsync(
+                                new EncryptedChunkItem(raw.Descriptor, null, NeedsUpload: false),
+                                cancellationToken).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            var aad = Encoding.UTF8.GetBytes($"chunk:{raw.Descriptor.Id.Value}");
+                            var envelope = crypto.Encrypt(raw.Data, contentKey, aad);
+                            var envelopeBytes = envelope.ToBytes();
+
+                            await uploadChannel.Writer.WriteAsync(
+                                new EncryptedChunkItem(raw.Descriptor, envelopeBytes, NeedsUpload: true),
+                                cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+                    finally
+                    {
+                        CryptographicOperations.ZeroMemory(raw.Data);
+                    }
+                }
+                uploadChannel.Writer.Complete();
+            }
+            catch (Exception ex)
+            {
+                uploadChannel.Writer.Complete(ex);
+                throw;
+            }
+        }, cancellationToken);
+
+        // Uploader Stage: Upload to storage provider and persist remote reference
+        var uploaderTask = Task.Run(async () =>
+        {
+            await foreach (var item in uploadChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            {
+                if (item.NeedsUpload && item.EnvelopeBytes != null)
+                {
+                    using var uploadStream = new MemoryStream(item.EnvelopeBytes);
+                    var descriptor = await storageProvider.PutObjectAsync(
+                        item.Descriptor.Id,
+                        uploadStream,
+                        progress: null,
+                        cancellationToken: cancellationToken
+                    ).ConfigureAwait(false);
+
+                    var remoteRef = new RemoteObjectRef(
+                        ObjectId: item.Descriptor.Id,
+                        ProviderId: storageProvider.ProviderId,
+                        RemoteIdentifier: descriptor.ProviderReference ?? item.Descriptor.Id.Value,
+                        UploadedAtUtc: DateTimeOffset.UtcNow,
+                        IsVerified: true
+                    );
+                    await catalogRepository.SaveRemoteObjectRefAsync(remoteRef, cancellationToken).ConfigureAwait(false);
+
+                    if (options.ThrottleDelayMs > 0)
+                    {
+                        await Task.Delay(options.ThrottleDelayMs, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+        }, cancellationToken);
+
+        await Task.WhenAll(readerTask, encryptorTask, uploaderTask).ConfigureAwait(false);
     }
 }

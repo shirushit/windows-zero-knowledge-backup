@@ -43,7 +43,7 @@ public sealed class StorageRetryPolicy
     {
         if (ex is RateLimitException rateEx && rateEx.RetryAfter.HasValue)
         {
-            return rateEx.RetryAfter.Value;
+            return rateEx.RetryAfter.Value + TimeSpan.FromSeconds(1);
         }
 
         // Exponential backoff: initial * 2^(attempt - 1)

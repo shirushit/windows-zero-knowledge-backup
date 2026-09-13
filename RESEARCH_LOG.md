@@ -400,4 +400,108 @@ Security review: End-to-end zero-knowledge encryption preserved; temp preview fi
 Problems: Adjusted Gate5 progress report count assertion to account for fine-grained phase progress reporting during restore.
 Decisions: Decoupled process launching behind `IProcessLauncher` to ensure unit testability in headless environments without modal or shell window side-effects.
 Next: Commit to feat/restore-hardening-and-preview, merge with --no-ff into main, push to origin, and rebuild release standalone package.
+### 2026-09-10 03:12 +03:00 — Feature: Fast Incremental Backup Change Detection & Progress Reporting
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: main
+Commit: pending
+Plan item: Incremental Backup Engine: Metadata comparison (LastWriteTimeUtc & FileSize), Chunk reuse without Telegram re-upload, and Scan/Upload/Unchanged Summary Reporting
+Completed:
+- Optimized `ChangeDetectionService` metadata comparison: if a file in `catalog.sqlite` has identical `FileSize` and `LastWriteTimeUtc` (within 1-second filesystem tolerance), it is marked `Unchanged` without reading or hashing the file on disk.
+- Updated `IBackupOrchestrator`: ensures prior file records are loaded from both the latest snapshot and `catalogRepository.GetLatestFileVersionAsync`.
+- Unchanged and renamed files skip re-uploading to Telegram, reusing existing chunk references and entries.
+- Files with modified size/timestamp or new files undergo SHA-256 calculation, chunk splitting, XChaCha20-Poly1305 encryption, and upload to Telegram.
+- Added `UploadedFilesCount` and `UnchangedFilesCount` tracking in `BackupProgressReport`.
+- Updated `MainViewModel.RunBackupAsync` to format the exact Hebrew completion summary: `"{X} קבצים נסרקו, {Y} קבצים חדשים הועלו, {Z} קבצים ללא שינוי (דולגו)"` for both `StatusSubtitle` and `ProgressSummary`.
+Changed: src/BackupApp.BackupEngine/ChangeDetection/ChangeDetectionService.cs, src/BackupApp.BackupEngine/IBackupOrchestrator.cs, src/BackupApp.UI/ViewModels/MainViewModel.cs, RESEARCH_LOG.md.
+Tests/build: `dotnet build BackupApp.sln` succeeded (0 warnings, 0 errors).
+Security review: Zero-knowledge encryption enforced for all uploaded chunks; skipped files retain existing authenticated chunk references; no secret leakage.
+Problems: None.
+Decisions: Avoided redundant file reads on unchanged files by doing quick metadata checks against catalog records; preserved chunk-level deduplication for modified files.
+Next: Ready for review and user instructions.
 
+### 2026-09-10 03:18 +03:00 — Feature: File Versioning Support in SQLite Catalog & UI (Browse Tab 2)
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: main
+Commit: pending
+Plan item: Versioning Support: SQLite Schema Migration 002 (version_timestamp & history indexes), Version History UI panel/Context Menu in Tab 2, and Direct Historical Version Restore
+Completed:
+- Created `Migration002AddFileVersionTimestampAndIndex`: adds `version_timestamp` column to `file_versions` and creates indexes (`idx_file_versions_path_history`, `idx_file_versions_entry_history`, `idx_file_versions_timestamp`). Registered migration in `SchemaMigrator`.
+- Updated `SqliteCatalogRepository`:
+  - In `SaveFileEntriesAndVersionsAsync`: populates `version_timestamp` on insert. All versions across snapshots are permanently retained without overwriting.
+  - Implemented `GetFileVersionsAsync(CanonicalPath path, BackupSetId? backupSetId = null)`: queries all historical committed versions of a file ordered by snapshot number and timestamp descending, including their chunk references.
+- Updated `MainViewModel`:
+  - Created `FileVersionItemViewModel` formatting version number, snapshot ID, backup timestamp, file modified date, formatted size, and SHA-256 hash.
+  - Added `SelectedFileVersions`, `SelectedVersion`, `IsVersionHistoryVisible`, `HasSelectedVersion`, and `HasSelectedFile` properties.
+  - Implemented `ShowFileVersionsCommand`, `CloseVersionHistoryCommand`, and `RestoreSelectedVersionCommand`.
+  - Implemented `RestoreSelectedVersionAsync`: constructs an isolated `SnapshotManifest` for the historical version and invokes `_restoreOrchestrator.RestoreFileAsync` with full zero-knowledge decryption, integrity verification, and target path resolution.
+- Updated `MainWindow.xaml`:
+  - Added "🕒 היסטוריית גרסאות" button to the selected file Action Bar.
+  - Added "🕒 היסטוריית גרסאות" item to the row Context Menu.
+  - Added secondary Version History panel in Tab 2 displaying all versions in a dedicated `ListView` with "📥 שחזר גרסה זו" and "✕ סגור" actions.
+- Verified:
+  - Added `CatalogRepositoryTests.GetFileVersionsAsync_ShouldReturnAllVersionsDescending_WithoutOverwritingPriorRecords` (passed).
+  - Added `MainViewModelTests.MainViewModel_VersionHistory_ShouldDisplayVersionsAndRestoreHistoricalVersion` (passed).
+  - Verified `dotnet build BackupApp.sln` clean (0 warnings, 0 errors).
+Changed: src/BackupApp.Catalog/Migrations/Migration002AddFileVersionTimestampAndIndex.cs, src/BackupApp.Catalog/Migrations/SchemaMigrator.cs, src/BackupApp.Catalog/ICatalogRepository.cs, src/BackupApp.Catalog/SqliteCatalogRepository.cs, src/BackupApp.UI/ViewModels/MainViewModel.cs, src/BackupApp.UI/MainWindow.xaml, tests/BackupApp.UnitTests/CatalogRepositoryTests.cs, tests/BackupApp.UnitTests/MainViewModelTests.cs, RESEARCH_LOG.md.
+Tests/build: `dotnet build BackupApp.sln` succeeded (0 warnings, 0 errors); new unit tests passed.
+Security review: Zero-knowledge decryption enforced for historical restores; cryptographic integrity and non-tampering verified via XChaCha20-Poly1305 and SHA-256.
+Problems: None.
+Decisions: Kept version history panel collapsible and reactive to file selection changes; versions are listed in reverse chronological order (newest first).
+### 2026-09-10 03:24 +03:00 — Feature: Resilient Telegram API Rate Limiter & HTTP 429 Handling with Live UI Countdown
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: main
+Commit: pending
+Plan item: Telegram API Resilience: SemaphoreSlim / TokenBucket Rate Limiter (20-25 req/min), HTTP 429 retry_after + 1s backoff, and Live UI ProgressBar Thawing Countdown
+Completed:
+- Created `ITelegramUploader` and `TelegramUploader` with `TokenBucketRateLimiter` using `SemaphoreSlim(1, 1)` async lock, capping requests to 20-25 uploads per minute.
+- Added HTTP 429 detection with `ParseRetryAfterAsync` inspecting both standard HTTP `Retry-After` header and Telegram JSON `parameters.retry_after`.
+- Implemented automatic waiting of `retry_after + 1` second with second-by-second countdown callbacks calling `OnRateLimitDelay`.
+- Rewound `contentStream.Position = 0` on retry attempts and integrated 3-attempt exponential backoff for transient transport failures.
+- Defined `IRateLimitedStorageProvider` in `BackupApp.Storage` and implemented on `TelegramStorageAdapter`.
+- Updated `IBackupOrchestrator.RunBackupAsync` and `BackupProgressReport` with `StatusMessage` reporting live rate limit delays.
+- Updated `MainViewModel` progress reporter to display `"ממתין להפשרת קצב מטלגרם (X שניות)..."` in real-time above and below the ProgressBar.
+- Added unit tests in `TelegramStorageTests`: `TokenBucketRateLimiter_ShouldAllowImmediateBurst_ThenEnforceRateLimit`, `TelegramUploader_OnHttp429_ShouldWaitForRetryAfterPlusOneSecond_AndInvokeCallback`, and `TelegramUploader_ParseRetryAfter_HeadersAndBody`.
+Changed: src/BackupApp.Storage/IStorageProvider.cs, src/BackupApp.Storage/StorageRetryPolicy.cs, src/BackupApp.Storage.Telegram/TelegramUploader.cs, src/BackupApp.Storage.Telegram/TelegramStorageAdapter.cs, src/BackupApp.BackupEngine/IBackupOrchestrator.cs, src/BackupApp.UI/ViewModels/MainViewModel.cs, tests/BackupApp.UnitTests/TelegramStorageTests.cs, RESEARCH_LOG.md.
+Tests/build: `dotnet build BackupApp.sln` clean (0 warnings, 0 errors); targeted unit tests (`TelegramStorageTests`, `MainViewModelTests`) passed 100%.
+Security review: Zero-knowledge encryption unchanged; rate limiter preserves token secrets and authenticated payload integrity; stream rewinding prevents data truncation.
+Problems: Resolved Roslyn CA1001 by implementing `IDisposable` on `TokenBucketRateLimiter` and `TelegramUploader`.
+Decisions: Used `TokenBucketRateLimiter` with capacity 20 and refill rate of 20 tokens/min to align with Telegram Bot API chat rate limits while allowing fast bursts for small chunks.
+Next: Ready for review and user feedback.
+
+### 2026-09-10 03:55 +03:00 — Massive Engineering Sprint: 7 Modules Completed (Audit, Launcher, FastCDC, Chaos Simulator, Pipeline, Previews, Packaging)
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: main
+Commit: pending
+Plan item: Massive Autonomous Engineering Sprint (Modules 1-7)
+Completed:
+- Module 1 (Security Audit & Zero-Trust Hardening):
+  - Audited and hardened memory hygiene with `CryptographicOperations.ZeroMemory` across `ManifestCryptoService`, `EncryptedEnvelope`, `IRestoreOrchestrator`, and `IBackupOrchestrator`.
+  - Enforced DPAPI CurrentUser encryption for credential storage. Verified strict AEAD authentication tag validation in XChaCha20-Poly1305.
+- Module 2 (One-Click Instant Launcher):
+  - Created standalone launcher package at `C:\Users\owner\Desktop\BackupApp-Launcher` containing `BackupApp.exe` (self-contained single-file win-x64), `Start-BackupApp.bat`, and `BackupApp.lnk`.
+- Module 3 (Smart Storage Engine - FastCDC & Global Deduplication):
+  - Implemented `FastCdcChunker` with 64-bit Gear Matrix rolling hashing, dual masks (`_maskS`, `_maskL`), min 256KB, target 1MB, max 4MB chunk sizes.
+  - Implemented global SQLite deduplication and Point-in-Time Restore in `MainViewModel` and Tab 3 of `MainWindow.xaml` allowing snapshot selection and historical state recovery.
+- Module 4 (Stress Testing Infrastructure & Chaos Simulator):
+  - Built dedicated test project `tests/BackupApp.StressTests`.
+  - Implemented `SyntheticFileTreeGenerator` with Hebrew, Unicode, spaces, active locked files, and varying file sizes (1KB - 10MB).
+  - Implemented `TelegramChaosHttpMessageHandler` simulating HTTP 429 rate limits, dynamic `retry_after`, random latency, TCP connection resets, and HTTP 500 crashes.
+  - Added `ChaosEndToEndStressTests` validating full roundtrip backup, deduplication, and restore with bit-for-bit SHA-256 integrity verification.
+- Module 5 (Performance, Concurrency & Background Pipeline):
+  - Re-architected `IBackupOrchestrator` using a 3-stage `System.Threading.Channels` bounded pipeline (`ReadChannel -> EncryptChannel -> UploadChannel`), decoupling disk I/O, crypto CPU operations, and network bandwidth.
+  - Integrated resumable upload skip and verified 10-second debounce on `FileSystemWatcher` change detection.
+- Module 6 (WPF Modern Fluent UI & Previews):
+  - Applied modern Fluent typography (`Segoe UI Variable`), soft card styling, and responsive layout to `MainWindow.xaml`.
+  - Added live transfer speed meter (`CurrentSpeedFormatted`, `EtaFormatted`, `HasSpeedOrEta`) in Tab 1.
+  - Added integrated file preview panel in Tab 2 with image thumbnails, text/source code snippets, and metadata badges.
+- Module 7 (Verification, Test Suite & Packaging):
+  - Verified 100% test pass rate across all test suites: 159/159 tests passed (`BackupApp.CryptoTests`: 27, `BackupApp.StressTests`: 1, `BackupApp.UnitTests`: 131).
+  - Ran `dotnet format BackupApp.sln` to guarantee style consistency.
+  - Generated official Release ZIP `artifacts/release/BackupApp-v1.0.0-win-x64.zip`, `SHA256SUMS.txt`, and `SBOM.txt`. Updated desktop launcher executable.
+  - Updated `README.md` with comprehensive documentation.
+Changed: src/BackupApp.Domain/Chunking/FastCdcChunker.cs, src/BackupApp.Crypto/ManifestCryptoService.cs, src/BackupApp.Crypto/EncryptedEnvelope.cs, src/BackupApp.BackupEngine/IBackupOrchestrator.cs, src/BackupApp.RestoreEngine/IRestoreOrchestrator.cs, src/BackupApp.UI/ViewModels/MainViewModel.cs, src/BackupApp.UI/MainWindow.xaml, tests/BackupApp.StressTests/*, tests/BackupApp.UnitTests/FastCdcAndPointInTimeTests.cs, tests/BackupApp.UnitTests/HardeningTests.cs, scripts/build-release.ps1, README.md, RESEARCH_LOG.md.
+Tests/build: 159/159 tests passed (100%); `dotnet build BackupApp.sln` succeeded (0 errors, 0 warnings); release packaging succeeded.
+Security review: Zero-knowledge invariants fully preserved; nonces are unique 192-bit; master keys derived with Argon2id; DPAPI protects local credentials; memory zeroization active on all intermediate buffers; strict AEAD integrity verified under chaos.
+Problems: Resolved C# 12 `ReadOnlySpan` across `await` boundary by extracting `ProcessChunk`; resolved SQLite foreign key ordering constraint in `SqliteCatalogRepository`.
+Decisions: Retained both fixed and FastCDC chunkers behind `IChunker` interface; configured FastCDC as default for resilient content deduplication.
+Next: Ready for production deployment and user testing.

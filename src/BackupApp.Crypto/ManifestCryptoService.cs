@@ -125,10 +125,11 @@ public sealed class ManifestCryptoService : IManifestCryptoService
         ArgumentNullException.ThrowIfNull(masterKey);
 
         var manifestKey = masterKey.DeriveManifestKey();
+        byte[]? plaintext = null;
         try
         {
             var json = JsonSerializer.Serialize(manifest, ManifestJsonContext.Default.SnapshotManifest);
-            var plaintext = Encoding.UTF8.GetBytes(json);
+            plaintext = Encoding.UTF8.GetBytes(json);
             var aad = Encoding.UTF8.GetBytes(BuildAssociatedData(manifest.BackupSetId, manifest.SnapshotNumber));
 
             return _crypto.Encrypt(plaintext, manifestKey, aad);
@@ -136,6 +137,10 @@ public sealed class ManifestCryptoService : IManifestCryptoService
         finally
         {
             CryptographicOperations.ZeroMemory(manifestKey);
+            if (plaintext != null)
+            {
+                CryptographicOperations.ZeroMemory(plaintext);
+            }
         }
     }
 
@@ -146,10 +151,11 @@ public sealed class ManifestCryptoService : IManifestCryptoService
         ArgumentNullException.ThrowIfNull(backupSetId);
 
         var manifestKey = masterKey.DeriveManifestKey();
+        byte[]? plaintextBytes = null;
         try
         {
             var aad = Encoding.UTF8.GetBytes(BuildAssociatedData(backupSetId, snapshotNumber));
-            var plaintextBytes = _crypto.Decrypt(envelope, manifestKey, aad);
+            plaintextBytes = _crypto.Decrypt(envelope, manifestKey, aad);
             var json = Encoding.UTF8.GetString(plaintextBytes);
 
             return JsonSerializer.Deserialize(json, ManifestJsonContext.Default.SnapshotManifest)
@@ -158,6 +164,10 @@ public sealed class ManifestCryptoService : IManifestCryptoService
         finally
         {
             CryptographicOperations.ZeroMemory(manifestKey);
+            if (plaintextBytes != null)
+            {
+                CryptographicOperations.ZeroMemory(plaintextBytes);
+            }
         }
     }
 

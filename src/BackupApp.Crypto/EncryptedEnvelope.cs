@@ -90,4 +90,9 @@ public sealed record EncryptedEnvelope
         var ciphertextWithTag = data[(6 + NonceLength + 4)..].ToArray();
         return new EncryptedEnvelope(version, cipherId, nonce, ciphertextWithTag);
     }
+
+    public override string ToString()
+    {
+        return $"[EncryptedEnvelope v{FormatVersion} Cipher={CipherId} CiphertextBytes={CiphertextWithTag.Length}]";
+    }
 }

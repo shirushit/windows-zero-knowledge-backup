@@ -8,25 +8,35 @@ using BackupApp.Domain;
 
 namespace BackupApp.Storage.Telegram;
 
-public sealed class TelegramStorageAdapter : IStorageProvider
+public sealed class TelegramStorageAdapter : IStorageProvider, IRateLimitedStorageProvider
 {
     private readonly HttpClient _httpClient;
     private readonly TelegramStorageConfiguration _config;
     private readonly StorageRetryPolicy _retryPolicy;
+    private readonly ITelegramUploader _uploader;
     private readonly ConcurrentDictionary<string, (string FileId, long MessageId, long SizeBytes, string HashSha256, DateTimeOffset UploadedAt)> _objectIndex = new(StringComparer.Ordinal);
     private readonly List<ObjectId> _manifestAnchors = [];
     private readonly object _lock = new();
 
     public string ProviderId => "telegram";
+    public ITelegramUploader Uploader => _uploader;
+
+    public Action<string>? OnRateLimitDelay
+    {
+        get => _uploader.OnRateLimitDelay;
+        set => _uploader.OnRateLimitDelay = value;
+    }
 
     public TelegramStorageAdapter(
         TelegramStorageConfiguration config,
         HttpClient? httpClient = null,
-        StorageRetryPolicy? retryPolicy = null)
+        StorageRetryPolicy? retryPolicy = null,
+        ITelegramUploader? uploader = null)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _httpClient = httpClient ?? new HttpClient { Timeout = config.RequestTimeout };
         _retryPolicy = retryPolicy ?? new StorageRetryPolicy(maxRetries: 3);
+        _uploader = uploader ?? new TelegramUploader(_config, _httpClient, _retryPolicy);
     }
 
     public Task<StorageCapabilities> GetCapabilitiesAsync(CancellationToken cancellationToken = default)
@@ -71,63 +81,26 @@ public sealed class TelegramStorageAdapter : IStorageProvider
     {
         ArgumentNullException.ThrowIfNull(contentStream);
 
-        return await _retryPolicy.ExecuteWithRetryAsync(async ct =>
+        var result = await _uploader.UploadDocumentAsync(id, contentStream, progress, cancellationToken).ConfigureAwait(false);
+
+        var now = DateTimeOffset.UtcNow;
+        _objectIndex[id.Value] = (result.FileId, result.MessageId, result.FileSize, result.HashSha256, now);
+
+        lock (_lock)
         {
-            if (contentStream.CanSeek)
+            if (!_manifestAnchors.Contains(id) && (isCatalogAnchor || id.Value.Contains("manifest", StringComparison.OrdinalIgnoreCase)))
             {
-                contentStream.Position = 0;
+                _manifestAnchors.Add(id);
             }
+        }
 
-            using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            using var trackedStream = new ProgressAndHashingStream(contentStream, sha, progress);
-
-            var sendDocUrl = $"{_config.ApiBaseUrl}/bot{_config.BotToken}/sendDocument";
-            using var form = new MultipartFormDataContent();
-            form.Add(new StringContent(_config.TargetChatId), "chat_id");
-            form.Add(new StringContent($"BA_CHUNK_{id.Value}"), "caption");
-
-            var streamContent = new StreamContent(trackedStream);
-            form.Add(streamContent, "document", $"{id.Value}.bin");
-
-            using var response = await _httpClient.PostAsync(new Uri(sendDocUrl), form, ct).ConfigureAwait(false);
-
-            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-            {
-                throw new ProviderAuthenticationException("Telegram bot token is invalid or revoked.");
-            }
-
-            if ((int)response.StatusCode == 429)
-            {
-                var retryAfter = await ParseRetryAfterAsync(response).ConfigureAwait(false);
-                throw new RateLimitException("Telegram API rate limit exceeded.", retryAfter);
-            }
-
-            response.EnsureSuccessStatusCode();
-
-            var responseJson = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            var (fileId, messageId, fileSize) = ParseSendDocumentResponse(responseJson);
-
-            var hashHex = Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant();
-            var now = DateTimeOffset.UtcNow;
-
-            _objectIndex[id.Value] = (fileId, messageId, fileSize, hashHex, now);
-
-            lock (_lock)
-            {
-                if (!_manifestAnchors.Contains(id) && (isCatalogAnchor || id.Value.Contains("manifest", StringComparison.OrdinalIgnoreCase)))
-                {
-                    _manifestAnchors.Add(id);
-                }
-            }
-
-            return new RemoteObjectDescriptor(
-                id,
-                fileSize,
-                hashHex,
-                now,
-                $"tg:{messageId}:{fileId}"
-            );
-        }, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return new RemoteObjectDescriptor(
+            id,
+            result.FileSize,
+            result.HashSha256,
+            now,
+            $"tg:{result.MessageId}:{result.FileId}"
+        );
     }
 
     public async Task<Stream> GetObjectAsync(ObjectId id, CancellationToken cancellationToken = default)
@@ -151,7 +124,17 @@ public sealed class TelegramStorageAdapter : IStorageProvider
             if ((int)getFileResponse.StatusCode == 429)
             {
                 var retryAfter = await ParseRetryAfterAsync(getFileResponse).ConfigureAwait(false);
-                throw new RateLimitException("Telegram API rate limit exceeded.", retryAfter);
+                var retrySeconds = retryAfter.HasValue && retryAfter.Value.TotalSeconds > 0
+                    ? (int)Math.Ceiling(retryAfter.Value.TotalSeconds)
+                    : 5;
+                var totalWaitSeconds = retrySeconds + 1;
+                for (int s = totalWaitSeconds; s > 0; s--)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    OnRateLimitDelay?.Invoke($"ממתין להפשרת קצב מטלגרם ({s} שניות)...");
+                    await Task.Delay(1000, ct).ConfigureAwait(false);
+                }
+                throw new RateLimitException("Telegram API rate limit exceeded.", TimeSpan.FromSeconds(totalWaitSeconds));
             }
 
             getFileResponse.EnsureSuccessStatusCode();
@@ -166,7 +149,17 @@ public sealed class TelegramStorageAdapter : IStorageProvider
             if ((int)downloadResponse.StatusCode == 429)
             {
                 var retryAfter = await ParseRetryAfterAsync(downloadResponse).ConfigureAwait(false);
-                throw new RateLimitException("Telegram API rate limit exceeded during download.", retryAfter);
+                var retrySeconds = retryAfter.HasValue && retryAfter.Value.TotalSeconds > 0
+                    ? (int)Math.Ceiling(retryAfter.Value.TotalSeconds)
+                    : 5;
+                var totalWaitSeconds = retrySeconds + 1;
+                for (int s = totalWaitSeconds; s > 0; s--)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    OnRateLimitDelay?.Invoke($"ממתין להפשרת קצב מטלגרם ({s} שניות)...");
+                    await Task.Delay(1000, ct).ConfigureAwait(false);
+                }
+                throw new RateLimitException("Telegram API rate limit exceeded during download.", TimeSpan.FromSeconds(totalWaitSeconds));
             }
 
             downloadResponse.EnsureSuccessStatusCode();
