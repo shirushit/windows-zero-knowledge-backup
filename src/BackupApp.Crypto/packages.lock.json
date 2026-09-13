@@ -2,12 +2,6 @@
   "version": 2,
   "dependencies": {
     "net8.0": {
-      "Microsoft.NET.ILLink.Tasks": {
-        "type": "Direct",
-        "requested": "[8.0.8, )",
-        "resolved": "8.0.8",
-        "contentHash": "P8wR6MUWwYXIjPJuBaZgo5zlI/GWI6QEAo6NyVIbPefa9CCkohYu7dP2rD/mrqnjEqfRHyl+h9VZrDoGpELqYg=="
-      },
       "NSec.Cryptography": {
         "type": "Direct",
         "requested": "[24.4.0, )",
@@ -30,13 +24,6 @@
       },
       "backupapp.domain": {
         "type": "Project"
-      }
-    },
-    "net8.0/win-x64": {
-      "libsodium": {
-        "type": "Transitive",
-        "resolved": "1.0.19",
-        "contentHash": "tupm/HViwBN6Knd/gckR+cLaJGR39GLmiU4iDMM5hp/1BoczMr8fwJhSU+3/C2V4hi9nBK/4FICRKtTLU30TCA=="
       }
     }
   }
