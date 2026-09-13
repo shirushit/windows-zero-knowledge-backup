@@ -57,8 +57,11 @@ public sealed class ChangeDetectionService : IChangeDetectionService
             {
                 remainingPreviousByPath.Remove(file.Path);
 
-                // Quick metadata check: if size and last write time match, mark Unchanged without reading file
-                if (file.SizeBytes == prev.SizeBytes && file.ModifiedUtc == prev.ModifiedUtc)
+                // Quick metadata check: if size and last write time match (within 1 second tolerance), mark Unchanged without reading file
+                bool isTimestampMatch = file.ModifiedUtc == prev.ModifiedUtc ||
+                                        Math.Abs((file.ModifiedUtc - prev.ModifiedUtc).TotalSeconds) < 1.0;
+
+                if (file.SizeBytes == prev.SizeBytes && isTimestampMatch)
                 {
                     results.Add(new DetectedFileChange(
                         FileChangeType.Unchanged,
@@ -71,30 +74,15 @@ public sealed class ChangeDetectionService : IChangeDetectionService
                     continue;
                 }
 
-                // If timestamps differ, verify content hash
-                var capture = await captureService.CaptureFileAsync(file.AbsolutePath, cancellationToken: cancellationToken).ConfigureAwait(false);
-                if (capture.Status == StableCaptureStatus.Success && capture.ContentHashSha256 == prev.ContentHashSha256)
-                {
-                    results.Add(new DetectedFileChange(
-                        FileChangeType.Unchanged,
-                        file.Path,
-                        null,
-                        file,
-                        prev,
-                        prev.FileEntryId
-                    ));
-                }
-                else
-                {
-                    results.Add(new DetectedFileChange(
-                        FileChangeType.Modified,
-                        file.Path,
-                        null,
-                        file,
-                        prev,
-                        prev.FileEntryId
-                    ));
-                }
+                // If size or timestamp differs, mark as Modified to trigger hash calculation, chunking, encryption and upload
+                results.Add(new DetectedFileChange(
+                    FileChangeType.Modified,
+                    file.Path,
+                    null,
+                    file,
+                    prev,
+                    prev.FileEntryId
+                ));
             }
             else
             {

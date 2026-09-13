@@ -9,7 +9,7 @@ public sealed class SchemaMigrator
     public SchemaMigrator(IEnumerable<ISchemaMigration>? migrations = null)
     {
         _migrations = migrations?.OrderBy(m => m.Version).ToList()
-            ?? [new Migration001InitialSchema()];
+            ?? [new Migration001InitialSchema(), new Migration002AddFileVersionTimestampAndIndex()];
     }
 
     public async Task MigrateAsync(SqliteConnection connection, CancellationToken cancellationToken = default)

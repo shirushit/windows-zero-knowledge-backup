@@ -41,6 +41,7 @@ public interface IStableFileCaptureService
         string absoluteFilePath,
         long maxChunkSizeBytes = 8 * 1024 * 1024,
         int maxRetries = 2,
+        bool useFastCdc = false,
         CancellationToken cancellationToken = default
     );
 }
@@ -53,6 +54,7 @@ public sealed class StableFileCaptureService : IStableFileCaptureService
         string absoluteFilePath,
         long maxChunkSizeBytes = 8 * 1024 * 1024,
         int maxRetries = 2,
+        bool useFastCdc = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(absoluteFilePath);
@@ -103,53 +105,71 @@ public sealed class StableFileCaptureService : IStableFileCaptureService
 
             await using (fileStream.ConfigureAwait(false))
             {
-                using var overallHasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-                var chunks = new List<FileChunkDescriptor>();
-                var buffer = new byte[ReadBufferSize];
+                IReadOnlyList<FileChunkDescriptor> chunks;
+                string overallHash;
+                long totalBytesRead;
 
-                var chunkIndex = 0;
-                long totalBytesRead = 0;
-
-                while (totalBytesRead < initialLength || fileStream.Position < fileStream.Length)
+                if (useFastCdc && initialLength > 64 * 1024)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    var minChunk = (int)Math.Clamp(maxChunkSizeBytes / 4, 64 * 1024, FastCdcChunker.DefaultMinChunkSize);
+                    var avgChunk = (int)Math.Clamp(maxChunkSizeBytes / 2, minChunk * 2, FastCdcChunker.DefaultAvgChunkSize);
+                    var maxChunk = (int)Math.Max(avgChunk * 2, maxChunkSizeBytes);
+                    var chunker = new FastCdcChunker(minChunk, avgChunk, maxChunk);
+                    (chunks, overallHash, totalBytesRead) = await chunker.ChunkStreamAsync(fileStream, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    using var overallHasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                    var fixedChunks = new List<FileChunkDescriptor>();
+                    var buffer = new byte[ReadBufferSize];
 
-                    using var chunkHasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-                    long chunkBytesRead = 0;
+                    var chunkIndex = 0;
+                    totalBytesRead = 0;
 
-                    while (chunkBytesRead < maxChunkSizeBytes)
+                    while (totalBytesRead < initialLength || fileStream.Position < fileStream.Length)
                     {
-                        var toRead = (int)Math.Min(buffer.Length, maxChunkSizeBytes - chunkBytesRead);
-                        var bytesRead = await fileStream.ReadAsync(buffer.AsMemory(0, toRead), cancellationToken).ConfigureAwait(false);
+                        cancellationToken.ThrowIfCancellationRequested();
 
-                        if (bytesRead == 0)
+                        using var chunkHasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                        long chunkBytesRead = 0;
+
+                        while (chunkBytesRead < maxChunkSizeBytes)
+                        {
+                            var toRead = (int)Math.Min(buffer.Length, maxChunkSizeBytes - chunkBytesRead);
+                            var bytesRead = await fileStream.ReadAsync(buffer.AsMemory(0, toRead), cancellationToken).ConfigureAwait(false);
+
+                            if (bytesRead == 0)
+                            {
+                                break;
+                            }
+
+                            chunkHasher.AppendData(buffer, 0, bytesRead);
+                            overallHasher.AppendData(buffer, 0, bytesRead);
+
+                            chunkBytesRead += bytesRead;
+                            totalBytesRead += bytesRead;
+                        }
+
+                        if (chunkBytesRead == 0)
                         {
                             break;
                         }
 
-                        chunkHasher.AppendData(buffer, 0, bytesRead);
-                        overallHasher.AppendData(buffer, 0, bytesRead);
+                        var chunkHash = Convert.ToHexString(chunkHasher.GetHashAndReset()).ToLowerInvariant();
+                        var chunkId = ObjectId.FromHex(chunkHash);
 
-                        chunkBytesRead += bytesRead;
-                        totalBytesRead += bytesRead;
+                        fixedChunks.Add(new FileChunkDescriptor(chunkId, chunkIndex++, chunkBytesRead, chunkHash));
                     }
 
-                    if (chunkBytesRead == 0)
+                    // If empty file, emit single empty chunk
+                    if (fixedChunks.Count == 0)
                     {
-                        break;
+                        var emptyHash = Convert.ToHexString(SHA256.HashData([])).ToLowerInvariant();
+                        fixedChunks.Add(new FileChunkDescriptor(ObjectId.FromHex(emptyHash), 0, 0, emptyHash));
                     }
 
-                    var chunkHash = Convert.ToHexString(chunkHasher.GetHashAndReset()).ToLowerInvariant();
-                    var chunkId = ObjectId.FromHex(chunkHash);
-
-                    chunks.Add(new FileChunkDescriptor(chunkId, chunkIndex++, chunkBytesRead, chunkHash));
-                }
-
-                // If empty file, emit single empty chunk
-                if (chunks.Count == 0)
-                {
-                    var emptyHash = Convert.ToHexString(SHA256.HashData([])).ToLowerInvariant();
-                    chunks.Add(new FileChunkDescriptor(ObjectId.FromHex(emptyHash), 0, 0, emptyHash));
+                    overallHash = Convert.ToHexString(overallHasher.GetHashAndReset()).ToLowerInvariant();
+                    chunks = fixedChunks;
                 }
 
                 // Verify file stability after complete read
@@ -168,7 +188,6 @@ public sealed class StableFileCaptureService : IStableFileCaptureService
                     );
                 }
 
-                var overallHash = Convert.ToHexString(overallHasher.GetHashAndReset()).ToLowerInvariant();
                 return StableCaptureResult.Successful(totalBytesRead, overallHash, chunks);
             }
         }

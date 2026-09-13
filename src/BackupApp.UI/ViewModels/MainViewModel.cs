@@ -9,6 +9,7 @@ using BackupApp.Catalog;
 using BackupApp.Crypto;
 using BackupApp.Domain;
 using BackupApp.RestoreEngine;
+using BackupApp.Scheduler;
 using BackupApp.Storage;
 using BackupApp.Storage.Telegram;
 using BackupApp.UI.Services;
@@ -27,21 +28,74 @@ public enum ProtectionState
 
 public sealed class FileItemViewModel : ViewModelBase
 {
+    public SnapshotManifestItem ManifestItem { get; }
     public string RelativePath { get; }
     public string FormattedPath { get; }
     public long SizeBytes { get; }
     public string FormattedSize { get; }
     public DateTimeOffset ModifiedUtc { get; }
     public string FormattedDate { get; }
+    public string ContentHashSha256 => ManifestItem.ContentHashSha256;
+    public int ChunkCount => ManifestItem.ChunkIds.Count;
+    public string ShortHash => ManifestItem.ContentHashSha256.Length > 16 ? ManifestItem.ContentHashSha256[..16] + "..." : ManifestItem.ContentHashSha256;
 
     public FileItemViewModel(SnapshotManifestItem item)
     {
+        ManifestItem = item;
         RelativePath = item.Path;
         FormattedPath = PathFormatter.FormatForRtl(item.Path);
         SizeBytes = item.SizeBytes;
         FormattedSize = PathFormatter.FormatBytes(item.SizeBytes);
         ModifiedUtc = item.ModifiedUtc;
         FormattedDate = item.ModifiedUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
+    }
+}
+
+public sealed class FileVersionItemViewModel : ViewModelBase
+{
+    public FileVersion Version { get; }
+    public string RelativePath { get; }
+    public string FormattedPath { get; }
+    public string SnapshotId { get; }
+    public string SnapshotLabel { get; }
+    public long SizeBytes { get; }
+    public string FormattedSize { get; }
+    public DateTimeOffset BackupDate { get; }
+    public string BackupDateFormatted { get; }
+    public DateTimeOffset ModifiedDate { get; }
+    public string ModifiedDateFormatted { get; }
+    public string ShortHash { get; }
+
+    public FileVersionItemViewModel(FileVersion version, int versionIndex = 0)
+    {
+        Version = version;
+        RelativePath = version.Path.Value;
+        FormattedPath = PathFormatter.FormatForRtl(version.Path.Value);
+        SnapshotId = version.SnapshotId.Value.ToString("D");
+        SnapshotLabel = versionIndex > 0 ? $"גרסה #{versionIndex}" : "גרסה אחרונה";
+        SizeBytes = version.SizeBytes;
+        FormattedSize = PathFormatter.FormatBytes(version.SizeBytes);
+        BackupDate = version.CreatedAtUtc;
+        BackupDateFormatted = version.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture);
+        ModifiedDate = version.ModifiedUtc;
+        ModifiedDateFormatted = version.ModifiedUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture);
+        ShortHash = version.ContentHashSha256.Length > 16 ? version.ContentHashSha256[..16] + "..." : version.ContentHashSha256;
+    }
+}
+
+public sealed class SnapshotItemViewModel : ViewModelBase
+{
+    public Snapshot Snapshot { get; }
+    public BackupSetId BackupSetId { get; }
+    public string IdString => Snapshot.Id.ToString();
+    public long SnapshotNumber => Snapshot.SnapshotNumber;
+    public DateTimeOffset CreatedAtUtc => Snapshot.CreatedAtUtc;
+    public string DisplayText => $"גיבוי #{Snapshot.SnapshotNumber} — {Snapshot.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture)} ({Snapshot.TotalFiles} קבצים, {PathFormatter.FormatBytes(Snapshot.TotalBytes)})";
+
+    public SnapshotItemViewModel(Snapshot snapshot, BackupSetId backupSetId)
+    {
+        Snapshot = snapshot;
+        BackupSetId = backupSetId;
     }
 }
 
@@ -60,12 +114,28 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private double _progressPercent;
     private string _currentProgressItem = string.Empty;
     private string _progressSummary = string.Empty;
+    private string _currentSpeedFormatted = string.Empty;
+    private string _etaFormatted = string.Empty;
     private CancellationTokenSource? _currentCts;
 
     // Search & Browse
     private string _searchQuery = string.Empty;
     private ObservableCollection<FileItemViewModel> _browsedFiles = [];
     private FileItemViewModel? _selectedFile;
+    private ObservableCollection<FileVersionItemViewModel> _selectedFileVersions = [];
+    private FileVersionItemViewModel? _selectedVersion;
+    private bool _isVersionHistoryVisible;
+
+    // File Preview
+    private string _previewTextContent = string.Empty;
+    private string? _previewImagePath;
+    private bool _isImagePreview;
+    private bool _isTextPreview;
+    private bool _isPreviewLoading;
+
+    // Point-in-Time Restore Snapshots
+    private ObservableCollection<SnapshotItemViewModel> _availableSnapshots = [];
+    private SnapshotItemViewModel? _selectedSnapshot;
 
     // Restore Options
     private string _restoreDestination = string.Empty;
@@ -82,6 +152,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private string _telegramBotToken = string.Empty;
     private string _telegramChatId = string.Empty;
     private string _settingsStatusMessage = string.Empty;
+
+    // Scheduling
+    private BackupScheduleMode _scheduleMode = BackupScheduleMode.Manual;
+    private string _dailyScheduleTime = "02:00";
+    private string _scheduleStatusText = "התזמון כבוי (ידני בלבד)";
 
     // Onboarding
     private bool _isOnboardingOpen;
@@ -155,6 +230,62 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         set => SetProperty(ref _progressSummary, value);
     }
 
+    public string CurrentSpeedFormatted
+    {
+        get => _currentSpeedFormatted;
+        set
+        {
+            if (SetProperty(ref _currentSpeedFormatted, value))
+            {
+                OnPropertyChanged(nameof(HasSpeedOrEta));
+            }
+        }
+    }
+
+    public string EtaFormatted
+    {
+        get => _etaFormatted;
+        set
+        {
+            if (SetProperty(ref _etaFormatted, value))
+            {
+                OnPropertyChanged(nameof(HasSpeedOrEta));
+            }
+        }
+    }
+
+    public bool HasSpeedOrEta => !string.IsNullOrWhiteSpace(_currentSpeedFormatted) || !string.IsNullOrWhiteSpace(_etaFormatted);
+
+    public string PreviewTextContent
+    {
+        get => _previewTextContent;
+        set => SetProperty(ref _previewTextContent, value);
+    }
+
+    public string? PreviewImagePath
+    {
+        get => _previewImagePath;
+        set => SetProperty(ref _previewImagePath, value);
+    }
+
+    public bool IsImagePreview
+    {
+        get => _isImagePreview;
+        set => SetProperty(ref _isImagePreview, value);
+    }
+
+    public bool IsTextPreview
+    {
+        get => _isTextPreview;
+        set => SetProperty(ref _isTextPreview, value);
+    }
+
+    public bool IsPreviewLoading
+    {
+        get => _isPreviewLoading;
+        set => SetProperty(ref _isPreviewLoading, value);
+    }
+
     public string SearchQuery
     {
         get => _searchQuery;
@@ -179,8 +310,73 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public FileItemViewModel? SelectedFile
     {
         get => _selectedFile;
-        set => SetProperty(ref _selectedFile, value);
+        set
+        {
+            if (SetProperty(ref _selectedFile, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedFile));
+                OnPropertyChanged(nameof(HasNoSelectedFile));
+                _ = UpdatePreviewForSelectedFileAsync(value);
+                if (value != null && IsVersionHistoryVisible)
+                {
+                    _ = LoadFileVersionsAsync(value);
+                }
+            }
+        }
     }
+
+    public bool HasSelectedFile => _selectedFile != null;
+    public bool HasNoSelectedFile => _selectedFile == null;
+
+    public ObservableCollection<FileVersionItemViewModel> SelectedFileVersions
+    {
+        get => _selectedFileVersions;
+        set => SetProperty(ref _selectedFileVersions, value);
+    }
+
+    public FileVersionItemViewModel? SelectedVersion
+    {
+        get => _selectedVersion;
+        set
+        {
+            if (SetProperty(ref _selectedVersion, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedVersion));
+            }
+        }
+    }
+
+    public bool HasSelectedVersion => _selectedVersion != null;
+
+    public bool IsVersionHistoryVisible
+    {
+        get => _isVersionHistoryVisible;
+        set => SetProperty(ref _isVersionHistoryVisible, value);
+    }
+
+    public ObservableCollection<SnapshotItemViewModel> AvailableSnapshots
+    {
+        get => _availableSnapshots;
+        set => SetProperty(ref _availableSnapshots, value);
+    }
+
+    public SnapshotItemViewModel? SelectedSnapshot
+    {
+        get => _selectedSnapshot;
+        set
+        {
+            if (SetProperty(ref _selectedSnapshot, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedSnapshot));
+                if (value != null)
+                {
+                    _ = LoadSnapshotManifestAsync(value);
+                }
+            }
+        }
+    }
+
+    public bool HasSelectedSnapshot => _selectedSnapshot != null;
 
     public string RestoreDestination
     {
@@ -286,6 +482,70 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         set => SetProperty(ref _hasSavedRecoveryPhrase, value);
     }
 
+    // Scheduling
+    public IBackupScheduler Scheduler => _scheduler;
+
+    public BackupScheduleMode ScheduleMode
+    {
+        get => _scheduleMode;
+        set
+        {
+            if (SetProperty(ref _scheduleMode, value))
+            {
+                OnPropertyChanged(nameof(IsScheduleModeManual));
+                OnPropertyChanged(nameof(IsScheduleModeHourly));
+                OnPropertyChanged(nameof(IsScheduleModeDaily));
+                OnPropertyChanged(nameof(IsScheduleModeChange));
+                UpdateScheduler();
+            }
+        }
+    }
+
+    public bool IsScheduleModeManual
+    {
+        get => _scheduleMode == BackupScheduleMode.Manual;
+        set { if (value) ScheduleMode = BackupScheduleMode.Manual; }
+    }
+
+    public bool IsScheduleModeHourly
+    {
+        get => _scheduleMode == BackupScheduleMode.Hourly;
+        set { if (value) ScheduleMode = BackupScheduleMode.Hourly; }
+    }
+
+    public bool IsScheduleModeDaily
+    {
+        get => _scheduleMode == BackupScheduleMode.Daily;
+        set { if (value) ScheduleMode = BackupScheduleMode.Daily; }
+    }
+
+    public bool IsScheduleModeChange
+    {
+        get => _scheduleMode == BackupScheduleMode.OnFileSystemChange;
+        set { if (value) ScheduleMode = BackupScheduleMode.OnFileSystemChange; }
+    }
+
+    public string DailyScheduleTime
+    {
+        get => _dailyScheduleTime;
+        set
+        {
+            if (SetProperty(ref _dailyScheduleTime, value))
+            {
+                if (_scheduleMode == BackupScheduleMode.Daily)
+                {
+                    UpdateScheduler();
+                }
+            }
+        }
+    }
+
+    public string ScheduleStatusText
+    {
+        get => _scheduleStatusText;
+        set => SetProperty(ref _scheduleStatusText, value);
+    }
+
     // Commands
     public ICommand TriggerBackupCommand { get; }
     public ICommand CancelOperationCommand { get; }
@@ -302,6 +562,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand ToggleThemeCommand { get; }
     public ICommand GenerateRecoveryKeyCommand { get; }
     public ICommand CompleteOnboardingCommand { get; }
+    public ICommand ShowFileVersionsCommand { get; }
+    public ICommand CloseVersionHistoryCommand { get; }
+    public ICommand RestoreSelectedVersionCommand { get; }
 
     private readonly List<FileItemViewModel> _allManifestFiles = [];
     private SnapshotManifest? _latestManifest;
@@ -315,6 +578,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly Func<TelegramStorageConfiguration, IStorageProvider> _storageFactory;
     private readonly IFolderPickerService _folderPickerService;
     private readonly IProcessLauncher _processLauncher;
+    private readonly IBackupScheduler _scheduler;
 
     public IStorageProvider StorageProvider => _storageProvider;
 
@@ -355,7 +619,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         ICredentialStoreService? credentialStoreService = null,
         Func<TelegramStorageConfiguration, IStorageProvider>? storageFactory = null,
         IFolderPickerService? folderPickerService = null,
-        IProcessLauncher? processLauncher = null)
+        IProcessLauncher? processLauncher = null,
+        IBackupScheduler? scheduler = null)
     {
         _credentialStoreService = credentialStoreService ?? new CredentialStoreService();
         _storageFactory = storageFactory ?? (config => new TelegramStorageAdapter(config));
@@ -366,6 +631,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _discoveryService = discoveryService ?? new RemoteCatalogDiscoveryService();
         _folderPickerService = folderPickerService ?? new WindowsFolderPickerService();
         _processLauncher = processLauncher ?? new WindowsProcessLauncher();
+        _scheduler = scheduler ?? new BackupScheduler();
+
+        _scheduler.BackupTriggered += async () =>
+        {
+            if (!IsBusy)
+            {
+                await RunBackupAsync().ConfigureAwait(false);
+            }
+        };
 
         TriggerBackupCommand = new AsyncRelayCommand(RunBackupAsync, () => !IsBusy);
         CancelOperationCommand = new RelayCommand(CancelOperation, () => IsBusy);
@@ -382,6 +656,28 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
         GenerateRecoveryKeyCommand = new RelayCommand(GenerateRecoveryKey);
         CompleteOnboardingCommand = new RelayCommand(CompleteOnboarding, () => HasSavedRecoveryPhrase && !string.IsNullOrWhiteSpace(MasterPassword));
+        ShowFileVersionsCommand = new AsyncRelayCommand(async p =>
+        {
+            var f = p as FileItemViewModel ?? SelectedFile;
+            if (f != null)
+            {
+                SelectedFile = f;
+            }
+            IsVersionHistoryVisible = true;
+            await LoadFileVersionsAsync(SelectedFile).ConfigureAwait(true);
+        });
+        CloseVersionHistoryCommand = new RelayCommand(() =>
+        {
+            IsVersionHistoryVisible = false;
+        });
+        RestoreSelectedVersionCommand = new AsyncRelayCommand(async p =>
+        {
+            var ver = p as FileVersionItemViewModel ?? SelectedVersion;
+            if (ver != null)
+            {
+                await RestoreSelectedVersionAsync(ver).ConfigureAwait(true);
+            }
+        }, _ => !IsBusy);
 
         // Default test root if none
         var sampleDocs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "BackupAppTest");
@@ -431,44 +727,36 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         try
         {
             var backupSets = await _catalogRepository.ListBackupSetsAsync(cancellationToken).ConfigureAwait(true);
-            Snapshot? latestSnapshot = null;
-            BackupSetId? latestBackupSetId = null;
+            var allSnapshots = new List<SnapshotItemViewModel>();
 
             foreach (var bset in backupSets)
             {
-                var snap = await _catalogRepository.GetLatestCommittedSnapshotAsync(bset.Id, cancellationToken).ConfigureAwait(true);
-                if (snap != null && (latestSnapshot == null || snap.SnapshotNumber > latestSnapshot.SnapshotNumber))
+                var snaps = await _catalogRepository.ListSnapshotsAsync(bset.Id, cancellationToken).ConfigureAwait(true);
+                foreach (var s in snaps.Where(s => s.Status == SnapshotStatus.Committed))
                 {
-                    latestSnapshot = snap;
-                    latestBackupSetId = bset.Id;
+                    allSnapshots.Add(new SnapshotItemViewModel(s, bset.Id));
                 }
             }
 
-            if (latestSnapshot != null && latestBackupSetId != null)
+            var sortedSnapshots = allSnapshots.OrderByDescending(s => s.SnapshotNumber).ToList();
+
+            RunOnUi(() =>
             {
-                var files = await _catalogRepository.GetSnapshotFilesAsync(latestSnapshot.Id, cancellationToken).ConfigureAwait(true);
-                var manifestItems = files.Select(f => new SnapshotManifestItem(
-                    Path: f.Path.Value,
-                    SizeBytes: f.SizeBytes,
-                    ContentHashSha256: f.ContentHashSha256,
-                    Attributes: (long)f.Attributes,
-                    CreatedAtUtc: f.CreatedAtUtc,
-                    ModifiedUtc: f.ModifiedUtc,
-                    ChunkIds: f.ChunkRefs.Select(c => c.Value).ToList()
-                )).ToList();
+                AvailableSnapshots.Clear();
+                foreach (var s in sortedSnapshots)
+                {
+                    AvailableSnapshots.Add(s);
+                }
+            });
 
-                var manifest = new SnapshotManifest(
-                    BackupSetId: latestBackupSetId.Value.ToString(),
-                    SnapshotId: latestSnapshot.Id.ToString(),
-                    SnapshotNumber: latestSnapshot.SnapshotNumber,
-                    CreatedAtUtc: latestSnapshot.CreatedAtUtc,
-                    TotalFiles: latestSnapshot.TotalFiles,
-                    TotalBytes: latestSnapshot.TotalBytes,
-                    Items: manifestItems
-                );
-
-                SetCurrentManifest(manifest);
-                LastBackupText = latestSnapshot.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
+            if (sortedSnapshots.Count > 0)
+            {
+                var latest = sortedSnapshots[0];
+                _selectedSnapshot = latest;
+                OnPropertyChanged(nameof(SelectedSnapshot));
+                OnPropertyChanged(nameof(HasSelectedSnapshot));
+                await LoadSnapshotManifestAsync(latest).ConfigureAwait(true);
+                LastBackupText = latest.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
             }
             else if (_unlockedMasterKey != null)
             {
@@ -484,6 +772,39 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         catch
         {
             // Catalog empty or initial startup
+        }
+    }
+
+    public async Task LoadSnapshotManifestAsync(SnapshotItemViewModel snapshotItem)
+    {
+        try
+        {
+            var files = await _catalogRepository.GetSnapshotFilesAsync(snapshotItem.Snapshot.Id).ConfigureAwait(true);
+            var manifestItems = files.Select(f => new SnapshotManifestItem(
+                Path: f.Path.Value,
+                SizeBytes: f.SizeBytes,
+                ContentHashSha256: f.ContentHashSha256,
+                Attributes: (long)f.Attributes,
+                CreatedAtUtc: f.CreatedAtUtc,
+                ModifiedUtc: f.ModifiedUtc,
+                ChunkIds: f.ChunkRefs.Select(c => c.Value).ToList()
+            )).ToList();
+
+            var manifest = new SnapshotManifest(
+                BackupSetId: snapshotItem.BackupSetId.ToString(),
+                SnapshotId: snapshotItem.Snapshot.Id.ToString(),
+                SnapshotNumber: snapshotItem.Snapshot.SnapshotNumber,
+                CreatedAtUtc: snapshotItem.Snapshot.CreatedAtUtc,
+                TotalFiles: snapshotItem.Snapshot.TotalFiles,
+                TotalBytes: snapshotItem.Snapshot.TotalBytes,
+                Items: manifestItems
+            );
+
+            SetCurrentManifest(manifest);
+        }
+        catch (Exception ex)
+        {
+            RestoreStatusMessage = $"שגיאה בטעינת נקודת הזמן: {ex.Message}";
         }
     }
 
@@ -518,14 +839,48 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 await _catalogRepository.SaveBackupSetAsync(backupSet, _currentCts.Token).ConfigureAwait(true);
             }
 
+            BackupProgressReport? lastReport = null;
+            CurrentSpeedFormatted = string.Empty;
+            EtaFormatted = string.Empty;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
             var progressReporter = new Progress<BackupProgressReport>(report =>
             {
-                CurrentProgressItem = PathFormatter.FormatForRtl(report.CurrentFileName);
-                if (report.TotalFilesScanned > 0)
+                lastReport = report;
+                if (!string.IsNullOrEmpty(report.StatusMessage))
                 {
-                    ProgressPercent = Math.Round((double)report.FilesProcessed / report.TotalFilesScanned * 100, 1);
+                    CurrentProgressItem = report.StatusMessage;
+                    ProgressSummary = report.StatusMessage;
                 }
-                ProgressSummary = $"{report.FilesProcessed} מתוך {report.TotalFilesScanned} קבצים ({PathFormatter.FormatBytes(report.BytesProcessed)})";
+                else
+                {
+                    CurrentProgressItem = PathFormatter.FormatForRtl(report.CurrentFileName);
+                    if (report.TotalFilesScanned > 0)
+                    {
+                        ProgressPercent = Math.Round((double)report.FilesProcessed / report.TotalFilesScanned * 100, 1);
+                    }
+                    ProgressSummary = $"{report.FilesProcessed} מתוך {report.TotalFilesScanned} קבצים ({PathFormatter.FormatBytes(report.BytesProcessed)})";
+
+                    var elapsedSec = sw.Elapsed.TotalSeconds;
+                    if (elapsedSec > 0.5 && report.BytesProcessed > 0)
+                    {
+                        var speedBytesPerSec = report.BytesProcessed / elapsedSec;
+                        CurrentSpeedFormatted = PathFormatter.FormatBytes((long)speedBytesPerSec) + "/s";
+                        var remainingBytes = Math.Max(0, report.TotalBytesScanned - report.BytesProcessed);
+                        if (speedBytesPerSec > 0 && remainingBytes > 0)
+                        {
+                            var etaSec = (int)(remainingBytes / speedBytesPerSec);
+                            var timeSpan = TimeSpan.FromSeconds(etaSec);
+                            EtaFormatted = timeSpan.TotalHours >= 1
+                                ? timeSpan.ToString(@"hh\:mm\:ss", System.Globalization.CultureInfo.InvariantCulture) + " נותרו"
+                                : timeSpan.ToString(@"mm\:ss", System.Globalization.CultureInfo.InvariantCulture) + " נותרו";
+                        }
+                        else
+                        {
+                            EtaFormatted = "מחשב...";
+                        }
+                    }
+                }
             });
 
             var snapId = await _backupOrchestrator.RunBackupAsync(
@@ -541,9 +896,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             // Reload catalog to refresh all backed-up files in Browse tab
             await LoadCatalogAsync(_currentCts.Token).ConfigureAwait(true);
 
+            var scanned = lastReport?.TotalFilesScanned ?? 0;
+            var uploaded = lastReport?.UploadedFilesCount ?? 0;
+            var unchanged = lastReport?.UnchangedFilesCount ?? 0;
+
             Status = ProtectionState.Protected;
             StatusTitle = "הגיבוי הושלם בהצלחה!";
-            StatusSubtitle = "כל הנתונים מוגנים ומאומתים באחסון המרוחק";
+            StatusSubtitle = $"{scanned} קבצים נסרקו, {uploaded} קבצים חדשים הועלו, {unchanged} קבצים ללא שינוי (דולגו)";
+            ProgressSummary = StatusSubtitle;
             LastBackupText = DateTime.Now.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
         }
         catch (OperationCanceledException)
@@ -561,6 +921,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         finally
         {
             IsBusy = false;
+            CurrentSpeedFormatted = string.Empty;
+            EtaFormatted = string.Empty;
             _currentCts?.Dispose();
             _currentCts = null;
         }
@@ -706,6 +1068,103 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (Directory.Exists(dest))
         {
             _processLauncher.Start(dest);
+        }
+    }
+
+    private async Task UpdatePreviewForSelectedFileAsync(FileItemViewModel? file)
+    {
+        if (file == null)
+        {
+            PreviewTextContent = string.Empty;
+            PreviewImagePath = null;
+            IsImagePreview = false;
+            IsTextPreview = false;
+            return;
+        }
+
+        IsPreviewLoading = true;
+        try
+        {
+            string? localPath = null;
+            foreach (var root in IncludedRoots)
+            {
+                var candidate = Path.Combine(root, file.RelativePath);
+                if (File.Exists(candidate))
+                {
+                    localPath = candidate;
+                    break;
+                }
+            }
+
+            if (localPath == null)
+            {
+                var tempCandidate = Path.Combine(Path.GetTempPath(), "BackupAppPreview", file.RelativePath);
+                if (File.Exists(tempCandidate))
+                {
+                    localPath = tempCandidate;
+                }
+            }
+
+            var ext = Path.GetExtension(file.RelativePath).ToLowerInvariant();
+            var imageExtensions = new HashSet<string> { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".ico", ".webp" };
+            var textExtensions = new HashSet<string> { ".txt", ".log", ".json", ".xml", ".cs", ".md", ".ini", ".csv", ".sql", ".yaml", ".yml", ".xaml", ".config", ".html", ".htm", ".js", ".ts" };
+
+            if (imageExtensions.Contains(ext))
+            {
+                if (localPath != null)
+                {
+                    PreviewImagePath = localPath;
+                    IsImagePreview = true;
+                    IsTextPreview = false;
+                }
+                else
+                {
+                    PreviewTextContent = "קובץ תמונה שמור ומאובטח בענן.\nלחץ '👁️ פתח קובץ' להורדה, פענוח והצגה.";
+                    PreviewImagePath = null;
+                    IsImagePreview = false;
+                    IsTextPreview = true;
+                }
+            }
+            else if (textExtensions.Contains(ext))
+            {
+                if (localPath != null)
+                {
+                    using var stream = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
+                    var buffer = new char[4096];
+                    var read = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(true);
+                    var content = new string(buffer, 0, read);
+                    if (stream.Length > buffer.Length)
+                    {
+                        content += "\n\n... [קובץ גדול: מוצג חלק מהתוכן]";
+                    }
+                    PreviewTextContent = content;
+                }
+                else
+                {
+                    PreviewTextContent = "קובץ טקסט שמור ומוצפן בענן.\nלחץ '👁️ פתח קובץ' להורדה, פענוח והצגה מלאה.";
+                }
+                PreviewImagePath = null;
+                IsImagePreview = false;
+                IsTextPreview = true;
+            }
+            else
+            {
+                PreviewTextContent = $"סוג קובץ ({ext}) שמור ומוצפן באפס-ידע.\nלחץ '👁️ פתח קובץ' לצפייה באמצעות יישום המערכת.";
+                PreviewImagePath = null;
+                IsImagePreview = false;
+                IsTextPreview = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            PreviewTextContent = $"שגיאה בטעינת תצוגה מקדימה: {ex.Message}";
+            IsImagePreview = false;
+            IsTextPreview = true;
+        }
+        finally
+        {
+            IsPreviewLoading = false;
         }
     }
 
@@ -886,6 +1345,128 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    public async Task LoadFileVersionsAsync(FileItemViewModel? fileItem = null)
+    {
+        fileItem ??= SelectedFile;
+        if (fileItem == null)
+        {
+            RunOnUi(() =>
+            {
+                SelectedFileVersions.Clear();
+                SelectedVersion = null;
+            });
+            return;
+        }
+
+        try
+        {
+            var canonical = CanonicalPath.From(fileItem.RelativePath);
+            var versions = await _catalogRepository.GetFileVersionsAsync(canonical).ConfigureAwait(true);
+
+            RunOnUi(() =>
+            {
+                SelectedFileVersions.Clear();
+                int idx = versions.Count;
+                foreach (var ver in versions)
+                {
+                    SelectedFileVersions.Add(new FileVersionItemViewModel(ver, idx--));
+                }
+                SelectedVersion = SelectedFileVersions.FirstOrDefault();
+                IsVersionHistoryVisible = true;
+            });
+        }
+        catch (Exception ex)
+        {
+            Status = ProtectionState.Error;
+            StatusTitle = "שגיאה בטעינת היסטוריית גרסאות";
+            StatusSubtitle = ex.Message;
+        }
+    }
+
+    public async Task RestoreSelectedVersionAsync(FileVersionItemViewModel? versionItem = null)
+    {
+        versionItem ??= SelectedVersion;
+        if (versionItem == null || _unlockedMasterKey == null)
+        {
+            return;
+        }
+
+        var dest = string.IsNullOrWhiteSpace(RestoreDestination)
+            ? Path.Combine(Path.GetTempPath(), "BackupAppRestore")
+            : RestoreDestination.Trim();
+        RestoreDestination = dest;
+
+        if (!Directory.Exists(dest))
+        {
+            Directory.CreateDirectory(dest);
+        }
+
+        IsBusy = true;
+        Status = ProtectionState.Restoring;
+        StatusTitle = "משחזר גרסה נבחרת...";
+        StatusSubtitle = $"משחזר את {versionItem.FormattedPath} ({versionItem.BackupDateFormatted})";
+        ProgressPercent = 0;
+
+        try
+        {
+            var ver = versionItem.Version;
+            var item = new SnapshotManifestItem(
+                Path: ver.Path.Value,
+                SizeBytes: ver.SizeBytes,
+                ContentHashSha256: ver.ContentHashSha256,
+                Attributes: (long)ver.Attributes,
+                CreatedAtUtc: ver.CreatedAtUtc,
+                ModifiedUtc: ver.ModifiedUtc,
+                ChunkIds: ver.ChunkRefs.Select(c => c.Value).ToList()
+            );
+
+            var tempManifest = new SnapshotManifest(
+                BackupSetId: Guid.Empty.ToString(),
+                SnapshotId: ver.SnapshotId.Value.ToString("D"),
+                SnapshotNumber: 0,
+                CreatedAtUtc: ver.CreatedAtUtc,
+                TotalFiles: 1,
+                TotalBytes: ver.SizeBytes,
+                Items: [item]
+            );
+
+            var options = new RestoreOptions(
+                DestinationRootPath: dest,
+                ConflictResolution: ConflictResolution,
+                RestoreTimestamps: RestoreTimestamps
+            );
+
+            await _restoreOrchestrator.RestoreFileAsync(
+                tempManifest,
+                ver.Path.Value,
+                _unlockedMasterKey,
+                _storageProvider,
+                options
+            ).ConfigureAwait(true);
+
+            var targetPath = RestoreOrchestrator.ValidateAndResolveTargetPath(dest, ver.Path.Value);
+
+            IsRestoreCompleted = true;
+            HasRestoreError = false;
+            Status = ProtectionState.Protected;
+            StatusTitle = "הגרסה שוחזרה בהצלחה!";
+            StatusSubtitle = $"{targetPath} ({versionItem.BackupDateFormatted})";
+            RestoreStatusMessage = $"הגרסה מתאריך {versionItem.BackupDateFormatted} שוחזרה בהצלחה אל: {targetPath}";
+        }
+        catch (Exception ex)
+        {
+            Status = ProtectionState.Error;
+            StatusTitle = "שגיאה בשחזור גרסה";
+            StatusSubtitle = ex.Message;
+            RestoreStatusMessage = $"שגיאה בשחזור גרסה: {ex.Message}";
+            HasRestoreError = true;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     private void CancelOperation()
     {
         _currentCts?.Cancel();
@@ -946,6 +1527,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         NewRootPath = string.Empty;
         SettingsStatusMessage = $"התיקייה נוספה בהצלחה: {PathFormatter.FormatForRtl(folder)}";
         _ = PersistRootsConfigurationAsync();
+        if (_scheduleMode == BackupScheduleMode.OnFileSystemChange)
+        {
+            UpdateScheduler();
+        }
     }
 
     private void RemoveFolder(object? parameter)
@@ -961,6 +1546,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 }
                 SettingsStatusMessage = $"התיקייה הוסרה בהצלחה: {PathFormatter.FormatForRtl(path)}";
                 _ = PersistRootsConfigurationAsync();
+                if (_scheduleMode == BackupScheduleMode.OnFileSystemChange)
+                {
+                    UpdateScheduler();
+                }
             }
         }
     }
@@ -1070,8 +1659,44 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         StatusSubtitle = "מוכן לביצוע גיבוי ראשון";
     }
 
+    public void UpdateScheduler()
+    {
+        var dailyTime = TimeSpan.FromHours(2);
+        if (TimeSpan.TryParse(_dailyScheduleTime, CultureInfo.InvariantCulture, out var parsed))
+        {
+            dailyTime = parsed;
+        }
+
+        var config = new ScheduleConfiguration(
+            Mode: _scheduleMode,
+            DailyTime: dailyTime,
+            ChangeDebounce: TimeSpan.FromSeconds(10),
+            WatchPaths: IncludedRoots.ToList()
+        );
+
+        _scheduler.Configure(config);
+
+        if (_scheduleMode == BackupScheduleMode.Manual)
+        {
+            _scheduler.StopScheduler();
+            ScheduleStatusText = "התזמון כבוי (ידני בלבד)";
+        }
+        else
+        {
+            _scheduler.StartScheduler();
+            ScheduleStatusText = _scheduleMode switch
+            {
+                BackupScheduleMode.Hourly => "גיבוי אוטומטי פעיל: יופעל מדי שעה",
+                BackupScheduleMode.Daily => $"גיבוי אוטומטי פעיל: מדי יום בשעה {_dailyScheduleTime}",
+                BackupScheduleMode.OnFileSystemChange => "ניטור שינויים פעיל בזמן אמת (סריקה והעלאה אוטומטית)",
+                _ => "פעיל ברקע"
+            };
+        }
+    }
+
     public void Dispose()
     {
+        _scheduler.Dispose();
         _currentCts?.Dispose();
         _currentCts = null;
         _unlockedMasterKey?.Dispose();

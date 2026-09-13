@@ -209,4 +209,70 @@ public class CatalogRepositoryTests : IAsyncDisposable
         completed!.Status.Should().Be(JobStatus.Completed);
         completed.CompletedAtUtc.Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task GetFileVersionsAsync_ShouldReturnAllVersionsDescending_WithoutOverwritingPriorRecords()
+    {
+        await _repo.InitializeAsync();
+
+        var setId = BackupSetId.New();
+        await _repo.SaveBackupSetAsync(new BackupSet(setId, "Docs", ["C:/Docs"], [], DateTimeOffset.UtcNow));
+
+        var snap1Id = SnapshotId.New();
+        await _repo.CreateSnapshotAsync(new Snapshot(snap1Id, setId, 1, DateTimeOffset.UtcNow.AddHours(-2), SnapshotStatus.InProgress, 0, 0));
+        await _repo.CommitSnapshotAsync(snap1Id, 1, 100);
+
+        var snap2Id = SnapshotId.New();
+        await _repo.CreateSnapshotAsync(new Snapshot(snap2Id, setId, 2, DateTimeOffset.UtcNow.AddHours(-1), SnapshotStatus.InProgress, 0, 0));
+        await _repo.CommitSnapshotAsync(snap2Id, 1, 200);
+
+        var entryId = FileEntryId.New();
+        var entry = new FileEntry(entryId, setId, snap1Id, DateTimeOffset.UtcNow.AddHours(-2));
+
+        var chunk1 = ObjectId.FromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var chunk2 = ObjectId.FromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        await _repo.SaveChunksAsync([
+            new StoredChunk(chunk1, 100, "hash1", 120, "hash1"),
+            new StoredChunk(chunk2, 200, "hash2", 220, "hash2")
+        ]);
+
+        var v1 = new FileVersion(
+            FileVersionId.New(),
+            entryId,
+            snap1Id,
+            CanonicalPath.From("report.docx"),
+            100,
+            DateTimeOffset.UtcNow.AddHours(-2),
+            DateTimeOffset.UtcNow.AddHours(-2),
+            "hash1",
+            FileEntryAttributes.None,
+            [chunk1]
+        );
+
+        var v2 = new FileVersion(
+            FileVersionId.New(),
+            entryId,
+            snap2Id,
+            CanonicalPath.From("report.docx"),
+            200,
+            DateTimeOffset.UtcNow.AddHours(-1),
+            DateTimeOffset.UtcNow.AddHours(-1),
+            "hash2",
+            FileEntryAttributes.None,
+            [chunk2]
+        );
+
+        await _repo.SaveFileEntriesAndVersionsAsync([entry], [v1, v2]);
+
+        var versions = await _repo.GetFileVersionsAsync(CanonicalPath.From("report.docx"), setId);
+
+        versions.Should().HaveCount(2);
+        versions[0].SnapshotId.Should().Be(snap2Id);
+        versions[0].SizeBytes.Should().Be(200);
+        versions[0].ChunkRefs.Should().ContainSingle().Which.Should().Be(chunk2);
+
+        versions[1].SnapshotId.Should().Be(snap1Id);
+        versions[1].SizeBytes.Should().Be(100);
+        versions[1].ChunkRefs.Should().ContainSingle().Which.Should().Be(chunk1);
+    }
 }

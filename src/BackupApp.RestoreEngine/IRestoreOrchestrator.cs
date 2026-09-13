@@ -270,9 +270,20 @@ public sealed class RestoreOrchestrator : IRestoreOrchestrator
                     ));
 
                     var aad = Encoding.UTF8.GetBytes($"chunk:{chunkId.Value}");
-                    var plaintext = _crypto.Decrypt(chunkBytes, contentKey, aad);
-
-                    await fs.WriteAsync(plaintext, cancellationToken).ConfigureAwait(false);
+                    byte[]? plaintext = null;
+                    try
+                    {
+                        plaintext = _crypto.Decrypt(chunkBytes, contentKey, aad);
+                        await fs.WriteAsync(plaintext, cancellationToken).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        if (plaintext != null)
+                        {
+                            CryptographicOperations.ZeroMemory(plaintext);
+                        }
+                        CryptographicOperations.ZeroMemory(chunkBytes);
+                    }
                 }
             }
 

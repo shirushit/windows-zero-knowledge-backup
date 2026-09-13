@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using Color = System.Windows.Media.Color;
 
 namespace BackupApp.UI.Services;
 
@@ -16,7 +17,7 @@ public static class ThemeManager
     public static void ApplyTheme(AppTheme theme)
     {
         CurrentTheme = theme;
-        var res = Application.Current.Resources;
+        var res = System.Windows.Application.Current.Resources;
 
         if (theme == AppTheme.Dark)
         {

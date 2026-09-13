@@ -112,7 +112,7 @@ public class HardeningTests : IDisposable
         var backupSet = new BackupSet(bsetId, "LargeChunkSet", [_sourceDir], [], DateTimeOffset.UtcNow);
         await catalog.SaveBackupSetAsync(backupSet);
 
-        var options = new BackupEngineOptions { ChunkSizeBytes = chunkSize };
+        var options = new BackupEngineOptions { ChunkSizeBytes = chunkSize, UseFastCdc = false };
         var backupEngine = new BackupOrchestrator();
         await backupEngine.RunBackupAsync(bsetId, masterKey, storage, catalog, options);
 

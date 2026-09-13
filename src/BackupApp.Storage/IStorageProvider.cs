@@ -17,6 +17,11 @@ public record RemoteObjectDescriptor(
     string? ProviderReference = null
 );
 
+public interface IRateLimitedStorageProvider
+{
+    Action<string>? OnRateLimitDelay { get; set; }
+}
+
 public interface IStorageProvider
 {
     string ProviderId { get; }
@@ -33,3 +38,4 @@ public interface IStorageProvider
     Task<bool> DeleteAsync(ObjectId id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ObjectId>> EnumerateCatalogAnchorsAsync(CancellationToken cancellationToken = default);
 }
+

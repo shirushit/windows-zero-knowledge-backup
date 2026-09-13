@@ -507,6 +507,56 @@ public class MainViewModelTests : IDisposable
         (await File.ReadAllTextAsync(restoredFile)).Should().Be("Auto Created Directory Test");
         vm.IsRestoreCompleted.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task MainViewModel_VersionHistory_ShouldDisplayVersionsAndRestoreHistoricalVersion()
+    {
+        var file1 = Path.Combine(_sourceDir, "history_doc.txt");
+        await File.WriteAllTextAsync(file1, "First Version Content");
+
+        var storage = new InMemoryStorageProvider();
+        var catalog = new SqliteCatalogRepository(_catalogDbPath);
+
+        using var vm = new MainViewModel(storageProvider: storage, catalogRepository: catalog)
+        {
+            RestoreDestination = _restoreDir
+        };
+        vm.IncludedRoots.Clear();
+        vm.IncludedRoots.Add(_sourceDir);
+
+        await vm.InitializeAsync();
+
+        // 1. Initial backup
+        await ((AsyncRelayCommand)vm.TriggerBackupCommand).ExecuteAsync(null);
+
+        // 2. Modify file and perform second backup (incremental)
+        await Task.Delay(20);
+        await File.WriteAllTextAsync(file1, "Second Version Content Modified");
+        File.SetLastWriteTimeUtc(file1, DateTime.UtcNow.AddMinutes(5));
+        await ((AsyncRelayCommand)vm.TriggerBackupCommand).ExecuteAsync(null);
+
+        // 3. Select file in browse tab and show file versions
+        var fileItem = vm.BrowsedFiles.FirstOrDefault(f => f.RelativePath.Contains("history_doc.txt"));
+        fileItem.Should().NotBeNull();
+        vm.SelectedFile = fileItem;
+
+        await ((AsyncRelayCommand)vm.ShowFileVersionsCommand).ExecuteAsync(fileItem);
+
+        vm.IsVersionHistoryVisible.Should().BeTrue();
+        vm.SelectedFileVersions.Should().HaveCount(2);
+
+        // Version 0 should be latest (second), Version 1 should be oldest (first)
+        var oldestVersion = vm.SelectedFileVersions.Last();
+        vm.SelectedVersion = oldestVersion;
+
+        // 4. Restore the older historical version directly
+        await ((AsyncRelayCommand)vm.RestoreSelectedVersionCommand).ExecuteAsync(oldestVersion);
+
+        vm.IsRestoreCompleted.Should().BeTrue();
+        var restoredPath = Path.Combine(_restoreDir, "history_doc.txt");
+        File.Exists(restoredPath).Should().BeTrue();
+        (await File.ReadAllTextAsync(restoredPath)).Should().Be("First Version Content");
+    }
 }
 
 public class MockFolderPickerService : IFolderPickerService

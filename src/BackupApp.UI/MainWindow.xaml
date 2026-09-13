@@ -10,6 +10,7 @@
         MinHeight="550" MinWidth="750"
         FlowDirection="RightToLeft"
         WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
         Background="{DynamicResource AppBackgroundBrush}">
 
     <Window.Resources>
@@ -147,6 +148,14 @@
                                     <TextBlock Text="{Binding CurrentProgressItem}" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Left" TextTrimming="CharacterEllipsis" MaxWidth="400"/>
                                     <TextBlock Text="{Binding ProgressSummary}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" HorizontalAlignment="Right"/>
                                 </Grid>
+                                <Grid Margin="0,8,0,0" Visibility="{Binding HasSpeedOrEta, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                                        <TextBlock Text="⚡ מהירות: " FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                        <TextBlock Text="{Binding CurrentSpeedFormatted}" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource AppAccentBrush}" Margin="0,0,16,0"/>
+                                        <TextBlock Text="⏳ זמן משוער: " FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                        <TextBlock Text="{Binding EtaFormatted}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                    </StackPanel>
+                                </Grid>
                                 <Button Content="בטל פעולה"
                                         Style="{StaticResource SecondaryButton}"
                                         Command="{Binding CancelOperationCommand}"
@@ -174,6 +183,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <Grid Grid.Row="0" Margin="0,0,0,10">
@@ -232,6 +242,15 @@
                                         Margin="0,0,8,0"
                                         Padding="12,6"
                                         FontSize="12"/>
+                                <Button Content="🕒 היסטוריית גרסאות"
+                                        Command="{Binding ShowFileVersionsCommand}"
+                                        CommandParameter="{Binding SelectedFile}"
+                                        ToolTip="הצג את כל הגרסאות הקודמות של הקובץ הנבחר עם תאריכי הגיבוי שלהן"
+                                        AutomationProperties.Name="היסטוריית גרסאות"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Margin="0,0,8,0"
+                                        Padding="12,6"
+                                        FontSize="12"/>
                                 <Button Content="📁 הצג בתיקייה"
                                         Command="{Binding ShowFileInFolderCommand}"
                                         CommandParameter="{Binding SelectedFile}"
@@ -244,43 +263,205 @@
                         </Grid>
                     </Border>
 
-                    <ListView Grid.Row="2"
-                              ItemsSource="{Binding BrowsedFiles}"
-                              SelectedItem="{Binding SelectedFile}"
-                              Background="{DynamicResource AppSurfaceBrush}"
-                              BorderBrush="{DynamicResource AppBorderBrush}"
-                              Foreground="{DynamicResource AppTextPrimaryBrush}"
-                              AutomationProperties.Name="רשימת קבצים מגובים">
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <EventSetter Event="MouseDoubleClick" Handler="OnListViewItemMouseDoubleClick"/>
-                                <Setter Property="ContextMenu">
-                                    <Setter.Value>
-                                        <ContextMenu FlowDirection="RightToLeft">
-                                            <MenuItem Header="👁️ פתח קובץ (שחזר וצפה)"
-                                                      Command="{Binding DataContext.OpenSelectedFileCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
-                                                      CommandParameter="{Binding}"
-                                                      FontWeight="SemiBold"/>
-                                            <MenuItem Header="📁 הצג בתיקייה (Explorer)"
-                                                      Command="{Binding DataContext.ShowFileInFolderCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
-                                                      CommandParameter="{Binding}"/>
-                                            <Separator/>
-                                            <MenuItem Header="📥 שחזר קובץ זה"
-                                                      Command="{Binding DataContext.RestoreSingleFileCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
-                                                      CommandParameter="{Binding}"/>
-                                        </ContextMenu>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ListView.ItemContainerStyle>
-                        <ListView.View>
-                            <GridView>
-                                <GridViewColumn Header="נתיב הקובץ" Width="400" DisplayMemberBinding="{Binding FormattedPath}"/>
-                                <GridViewColumn Header="גודל" Width="100" DisplayMemberBinding="{Binding FormattedSize}"/>
-                                <GridViewColumn Header="תאריך שינוי" Width="150" DisplayMemberBinding="{Binding FormattedDate}"/>
-                            </GridView>
-                        </ListView.View>
-                    </ListView>
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="320" MinWidth="260"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left: File List -->
+                        <ListView Grid.Column="0"
+                                  ItemsSource="{Binding BrowsedFiles}"
+                                  SelectedItem="{Binding SelectedFile}"
+                                  Background="{DynamicResource AppSurfaceBrush}"
+                                  BorderBrush="{DynamicResource AppBorderBrush}"
+                                  Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                  AutomationProperties.Name="רשימת קבצים מגובים"
+                                  Margin="0,0,10,0">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <EventSetter Event="MouseDoubleClick" Handler="OnListViewItemMouseDoubleClick"/>
+                                    <Setter Property="ContextMenu">
+                                        <Setter.Value>
+                                            <ContextMenu FlowDirection="RightToLeft">
+                                                <MenuItem Header="👁️ פתח קובץ (שחזר וצפה)"
+                                                          Command="{Binding DataContext.OpenSelectedFileCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                                          CommandParameter="{Binding}"
+                                                          FontWeight="SemiBold"/>
+                                                <MenuItem Header="🕒 היסטוריית גרסאות"
+                                                          Command="{Binding DataContext.ShowFileVersionsCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                                          CommandParameter="{Binding}"/>
+                                                <MenuItem Header="📁 הצג בתיקייה (Explorer)"
+                                                          Command="{Binding DataContext.ShowFileInFolderCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                                          CommandParameter="{Binding}"/>
+                                                <Separator/>
+                                                <MenuItem Header="📥 שחזר קובץ זה"
+                                                          Command="{Binding DataContext.RestoreSingleFileCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                                          CommandParameter="{Binding}"/>
+                                            </ContextMenu>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="נתיב הקובץ" Width="260" DisplayMemberBinding="{Binding FormattedPath}"/>
+                                    <GridViewColumn Header="גודל" Width="90" DisplayMemberBinding="{Binding FormattedSize}"/>
+                                    <GridViewColumn Header="תאריך שינוי" Width="130" DisplayMemberBinding="{Binding FormattedDate}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+
+                        <!-- Right: File Preview & Metadata Panel -->
+                        <Border Grid.Column="1"
+                                Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="14">
+                            <Grid>
+                                <!-- No file selected state -->
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                            Visibility="{Binding HasNoSelectedFile, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="📄" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8" Opacity="0.5"/>
+                                    <TextBlock Text="בחר קובץ מהרשימה" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource AppTextPrimaryBrush}" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="לצפייה בפרטים, תמונות ותוכן טקסט" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                </StackPanel>
+
+                                <!-- File selected preview content -->
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              Visibility="{Binding HasSelectedFile, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <TextBlock Text="תצוגה מקדימה ומטא-דאטה" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource AppAccentBrush}" Margin="0,0,0,8"/>
+
+                                        <!-- Metadata Card -->
+                                        <Border Background="{DynamicResource AppSurfaceHoverBrush}" CornerRadius="6" Padding="10" Margin="0,0,0,10">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding SelectedFile.FormattedPath}" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource AppTextPrimaryBrush}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                                <Grid Margin="0,2">
+                                                    <TextBlock Text="גודל:" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Left"/>
+                                                    <TextBlock Text="{Binding SelectedFile.FormattedSize}" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource AppTextPrimaryBrush}" HorizontalAlignment="Right"/>
+                                                </Grid>
+                                                <Grid Margin="0,2">
+                                                    <TextBlock Text="תאריך שינוי:" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Left"/>
+                                                    <TextBlock Text="{Binding SelectedFile.FormattedDate}" FontSize="11" Foreground="{DynamicResource AppTextPrimaryBrush}" HorizontalAlignment="Right"/>
+                                                </Grid>
+                                                <Grid Margin="0,2">
+                                                    <TextBlock Text="מקטעים (Chunks):" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Left"/>
+                                                    <TextBlock Text="{Binding SelectedFile.ChunkCount}" FontWeight="SemiBold" FontSize="11" Foreground="{DynamicResource AppAccentBrush}" HorizontalAlignment="Right"/>
+                                                </Grid>
+                                                <Grid Margin="0,2">
+                                                    <TextBlock Text="SHA-256:" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Left"/>
+                                                    <TextBlock Text="{Binding SelectedFile.ShortHash}" ToolTip="{Binding SelectedFile.ContentHashSha256}" FontSize="10" FontFamily="Consolas" Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Right"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Image Preview (for graphic files) -->
+                                        <Border Visibility="{Binding IsImagePreview, Converter={StaticResource BoolToVis}}"
+                                                BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="6"
+                                                Background="{DynamicResource AppBackgroundBrush}" Padding="4" Margin="0,0,0,10">
+                                            <Image Source="{Binding PreviewImagePath}" MaxHeight="180" Stretch="Uniform"/>
+                                        </Border>
+
+                                        <!-- Text Preview (for txt, json, code, md) -->
+                                        <Border Visibility="{Binding IsTextPreview, Converter={StaticResource BoolToVis}}"
+                                                BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="6"
+                                                Background="{DynamicResource AppBackgroundBrush}" Padding="6" Margin="0,0,0,10">
+                                            <TextBox Text="{Binding PreviewTextContent}"
+                                                     IsReadOnly="True"
+                                                     TextWrapping="Wrap"
+                                                     FontFamily="Consolas, Segoe UI"
+                                                     FontSize="10.5"
+                                                     MaxHeight="180"
+                                                     VerticalScrollBarVisibility="Auto"
+                                                     Background="Transparent"
+                                                     BorderThickness="0"
+                                                     Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                        </Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- Secondary Panel: Version History for Selected File -->
+                    <Border Grid.Row="3"
+                            Visibility="{Binding IsVersionHistoryVisible, Converter={StaticResource BoolToVis}}"
+                            Background="{DynamicResource AppSurfaceBrush}"
+                            BorderBrush="{DynamicResource AppAccentBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,12"
+                            Margin="0,10,0,0"
+                            MaxHeight="260">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🕒 היסטוריית גרסאות עבור: " FontWeight="Bold" FontSize="13" Foreground="{DynamicResource AppAccentBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding SelectedFile.FormattedPath}" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource AppTextPrimaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="400" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="📥 שחזר גרסה זו"
+                                            Command="{Binding RestoreSelectedVersionCommand}"
+                                            CommandParameter="{Binding SelectedVersion}"
+                                            IsEnabled="{Binding HasSelectedVersion}"
+                                            ToolTip="שחזר את הגרסה שנבחרה אל תיקיית היעד"
+                                            AutomationProperties.Name="שחזר גרסה נבחרת"
+                                            Padding="14,6"
+                                            Margin="0,0,8,0"
+                                            FontSize="12"/>
+                                    <Button Content="✕ סגור"
+                                            Command="{Binding CloseVersionHistoryCommand}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            ToolTip="סגור חלונית גרסאות"
+                                            AutomationProperties.Name="סגור חלונית גרסאות"
+                                            Padding="10,6"
+                                            FontSize="12"/>
+                                </StackPanel>
+                            </Grid>
+                            <ListView Grid.Row="1"
+                                      ItemsSource="{Binding SelectedFileVersions}"
+                                      SelectedItem="{Binding SelectedVersion}"
+                                      MaxHeight="180"
+                                      Background="{DynamicResource AppBackgroundBrush}"
+                                      BorderBrush="{DynamicResource AppBorderBrush}"
+                                      Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                      AutomationProperties.Name="רשימת גרסאות קובץ">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="ContextMenu">
+                                            <Setter.Value>
+                                                <ContextMenu FlowDirection="RightToLeft">
+                                                    <MenuItem Header="📥 שחזר גרסה זו"
+                                                              Command="{Binding DataContext.RestoreSelectedVersionCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                                              CommandParameter="{Binding}"
+                                                              FontWeight="SemiBold"/>
+                                                </ContextMenu>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.View>
+                                    <GridView>
+                                        <GridViewColumn Header="גרסה" Width="100" DisplayMemberBinding="{Binding SnapshotLabel}"/>
+                                        <GridViewColumn Header="תאריך גיבוי" Width="160" DisplayMemberBinding="{Binding BackupDateFormatted}"/>
+                                        <GridViewColumn Header="תאריך שינוי קובץ" Width="160" DisplayMemberBinding="{Binding ModifiedDateFormatted}"/>
+                                        <GridViewColumn Header="גודל" Width="100" DisplayMemberBinding="{Binding FormattedSize}"/>
+                                        <GridViewColumn Header="SHA-256 Hash" Width="160" DisplayMemberBinding="{Binding ShortHash}"/>
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+                        </Grid>
+                    </Border>
                 </Grid>
             </TabItem>
 
@@ -297,6 +478,15 @@
                             <StackPanel>
                                 <TextBlock Text="שחזור נתונים מאומת (Disaster Recovery)" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
                                 <TextBlock Text="כל הקבצים מורדים מהאחסון המרוחק, מוודאים אותנטיות ב-Poly1305 וחותמת זמן מקורית." FontSize="13" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,4,0,16"/>
+
+                                <TextBlock Text="נקודת זמן לשחזור (Point-in-Time Restore):" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,0,6"/>
+                                <ComboBox ItemsSource="{Binding AvailableSnapshots}"
+                                          SelectedItem="{Binding SelectedSnapshot}"
+                                          DisplayMemberPath="DisplayText"
+                                          Padding="10,8"
+                                          FontSize="13"
+                                          Margin="0,0,0,16"
+                                          AutomationProperties.Name="בחירת נקודת זמן לשחזור"/>
 
                                 <TextBlock Text="תיקיית יעד לשחזור:" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,0,6"/>
                                 <Grid Margin="0,0,0,16">
@@ -489,6 +679,59 @@
                                             Padding="14,6"/>
                                 </Grid>
                                 <TextBlock Text="{Binding SettingsStatusMessage}" FontSize="12" Foreground="{DynamicResource AppAccentBrush}" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Automatic Scheduling & Background Monitoring -->
+                        <Border Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="⏰ תזמון וגיבוי אוטומטי ברקע" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <TextBlock Text="הגדר תדירות להפעלת גיבוי אוטומטי כשהאפליקציה פועלת ברקע במגש המערכת." FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,4,0,12"/>
+
+                                <StackPanel Margin="0,0,0,12">
+                                    <RadioButton Content="ידני בלבד (ללא תזמון אוטומטי)"
+                                                 IsChecked="{Binding IsScheduleModeManual}"
+                                                 Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                                 Margin="0,0,0,8"/>
+                                    <RadioButton Content="כל שעה (גיבוי תקופתי)"
+                                                 IsChecked="{Binding IsScheduleModeHourly}"
+                                                 Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                                 Margin="0,0,0,8"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <RadioButton Content="כל יום בשעה מסוימת:"
+                                                     IsChecked="{Binding IsScheduleModeDaily}"
+                                                     Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                                     VerticalAlignment="Center"
+                                                     Margin="0,0,10,0"/>
+                                        <TextBox Text="{Binding DailyScheduleTime, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="70"
+                                                 Padding="6,4"
+                                                 FontSize="12"
+                                                 TextAlignment="Center"
+                                                 Background="{DynamicResource AppSurfaceBrush}"
+                                                 Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                                 BorderBrush="{DynamicResource AppBorderBrush}"
+                                                 ToolTip="הזן שעה בפורמט HH:mm (לדוגמה 02:00)"
+                                                 AutomationProperties.Name="שעת גיבוי יומית"
+                                                 VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <RadioButton Content="בעת שינוי בקבצים (ניטור שקט בזמן אמת - FileSystemWatcher)"
+                                                 IsChecked="{Binding IsScheduleModeChange}"
+                                                 Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                                 Margin="0,0,0,4"/>
+                                </StackPanel>
+
+                                <Border Background="{DynamicResource AppSurfaceHoverBrush}" CornerRadius="6" Padding="10,6">
+                                    <TextBlock Text="{Binding ScheduleStatusText}"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppAccentBrush}"/>
+                                </Border>
                             </StackPanel>
                         </Border>
 
