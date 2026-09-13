@@ -10,9 +10,9 @@ namespace BackupApp.BackupEngine.Capture;
 /// </summary>
 public sealed class FastCdcChunker
 {
-    public const int DefaultMinChunkSize = 256 * 1024;       // 256 KB
-    public const int DefaultAvgChunkSize = 1024 * 1024;      // 1 MB
-    public const int DefaultMaxChunkSize = 4 * 1024 * 1024;  // 4 MB
+    public const int DefaultMinChunkSize = 4 * 1024 * 1024;  // 4 MB
+    public const int DefaultAvgChunkSize = 16 * 1024 * 1024; // 16 MB
+    public const int DefaultMaxChunkSize = 32 * 1024 * 1024; // 32 MB
 
     private readonly int _minChunkSize;
     private readonly int _avgChunkSize;

@@ -109,7 +109,7 @@ public sealed class TelegramUploader : ITelegramUploader, IDisposable
         TelegramStorageConfiguration config,
         HttpClient? httpClient = null,
         StorageRetryPolicy? retryPolicy = null,
-        int maxUploadsPerMinute = 20,
+        int maxUploadsPerMinute = 25,
         int maxRetries = 3)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
