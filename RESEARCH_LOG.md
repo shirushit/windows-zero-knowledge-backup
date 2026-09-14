@@ -505,3 +505,21 @@ Security review: Zero-knowledge invariants fully preserved; nonces are unique 19
 Problems: Resolved C# 12 `ReadOnlySpan` across `await` boundary by extracting `ProcessChunk`; resolved SQLite foreign key ordering constraint in `SqliteCatalogRepository`.
 Decisions: Retained both fixed and FastCDC chunkers behind `IChunker` interface; configured FastCDC as default for resilient content deduplication.
 Next: Ready for production deployment and user testing.
+
+### 2026-09-14 03:02 +03:00 — Performance & UX Fix: Bypass Rename Hashing on New Backups & Live Pre-Scan Progress
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: main
+Commit: pending
+Plan item: Fix pre-scan delay and rename detection disk I/O bottleneck
+Completed:
+- Fixed `ChangeDetectionService.cs` rename detection loop: eliminated redundant SHA-256 calculation across all discovered files on initial/fresh backups where `remainingPreviousByPath.Count == 0`.
+- Restricted candidate file hashing to only files whose byte size matches one of the deleted files' sizes (`possibleSizes`).
+- Added real-time status reporting in `IBackupOrchestrator.cs` immediately upon file discovery and after change detection, ensuring the UI informs the user about scanned file count and size instead of silently waiting.
+- Ran all 159 unit, stress, and cryptographic tests (100% pass rate).
+- Re-packaged single-file self-contained Release executable and synced to `C:\Users\owner\Desktop\BackupApp-Launcher\BackupApp.exe`.
+Changed: src/BackupApp.BackupEngine/ChangeDetection/ChangeDetectionService.cs, src/BackupApp.BackupEngine/IBackupOrchestrator.cs, RESEARCH_LOG.md.
+Tests/build: 159/159 tests passed (100%); `dotnet build` clean; `scripts/build-release.ps1` completed successfully.
+Security review: Zero-knowledge invariants and cryptographic integrity intact; change detection bypass does not alter file verification during chunking and snapshot generation.
+Problems: None.
+Decisions: Skip rename matching when no deleted files exist; filter candidate files by exact byte size before computing hash.
+Next: Relaunch on interactive desktop and provide Hebrew explanation to user.

@@ -90,34 +90,54 @@ public sealed class ChangeDetectionService : IChangeDetectionService
             }
         }
 
-        // Rename detection: compare remaining previous files (deleted from their original path)
-        // with potentially new files by content hash & size
-        var previousByHashAndSize = remainingPreviousByPath.Values
-            .GroupBy(f => (f.SizeBytes, f.ContentHashSha256))
-            .ToDictionary(g => g.Key, g => new Queue<FileVersion>(g));
-
-        foreach (var file in potentiallyNew)
+        // Rename detection: only examine potentially new files if there are prior deleted files to match against
+        if (remainingPreviousByPath.Count > 0 && potentiallyNew.Count > 0)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var previousByHashAndSize = remainingPreviousByPath.Values
+                .GroupBy(f => (f.SizeBytes, f.ContentHashSha256))
+                .ToDictionary(g => g.Key, g => new Queue<FileVersion>(g));
 
-            var capture = await captureService.CaptureFileAsync(file.AbsolutePath, cancellationToken: cancellationToken).ConfigureAwait(false);
-            var hash = capture.Status == StableCaptureStatus.Success ? capture.ContentHashSha256 : null;
+            var possibleSizes = new HashSet<long>(remainingPreviousByPath.Values.Select(f => f.SizeBytes));
 
-            if (hash != null && previousByHashAndSize.TryGetValue((file.SizeBytes, hash), out var candidates) && candidates.Count > 0)
+            foreach (var file in potentiallyNew)
             {
-                var renamedFrom = candidates.Dequeue();
-                remainingPreviousByPath.Remove(renamedFrom.Path);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (possibleSizes.Contains(file.SizeBytes))
+                {
+                    var capture = await captureService.CaptureFileAsync(file.AbsolutePath, cancellationToken: cancellationToken).ConfigureAwait(false);
+                    var hash = capture.Status == StableCaptureStatus.Success ? capture.ContentHashSha256 : null;
+
+                    if (hash != null && previousByHashAndSize.TryGetValue((file.SizeBytes, hash), out var candidates) && candidates.Count > 0)
+                    {
+                        var renamedFrom = candidates.Dequeue();
+                        remainingPreviousByPath.Remove(renamedFrom.Path);
+
+                        results.Add(new DetectedFileChange(
+                            FileChangeType.Renamed,
+                            file.Path,
+                            renamedFrom.Path,
+                            file,
+                            renamedFrom,
+                            renamedFrom.FileEntryId
+                        ));
+                        continue;
+                    }
+                }
 
                 results.Add(new DetectedFileChange(
-                    FileChangeType.Renamed,
+                    FileChangeType.New,
                     file.Path,
-                    renamedFrom.Path,
+                    null,
                     file,
-                    renamedFrom,
-                    renamedFrom.FileEntryId
+                    null,
+                    null
                 ));
             }
-            else
+        }
+        else
+        {
+            foreach (var file in potentiallyNew)
             {
                 results.Add(new DetectedFileChange(
                     FileChangeType.New,

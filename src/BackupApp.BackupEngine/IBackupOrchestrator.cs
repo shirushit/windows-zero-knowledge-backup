@@ -94,6 +94,17 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
 
         long totalScannedBytes = discoveredFiles.Sum(f => f.SizeBytes);
 
+        progress?.Report(new BackupProgressReport(
+            TotalFilesScanned: discoveredFiles.Count,
+            FilesProcessed: 0,
+            TotalBytesScanned: totalScannedBytes,
+            BytesProcessed: 0,
+            CurrentFileName: null,
+            UploadedFilesCount: 0,
+            UnchangedFilesCount: 0,
+            StatusMessage: $"אותרו {discoveredFiles.Count} קבצים ({(double)totalScannedBytes / (1024 * 1024):N0} MB). בודק שינויים..."
+        ));
+
         // 3. Change Detection against latest committed snapshot and catalog
         var latestSnapshot = await catalogRepository.GetLatestCommittedSnapshotAsync(backupSetId, cancellationToken).ConfigureAwait(false);
         var previousFilesList = new List<FileVersion>();
@@ -119,6 +130,20 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
         }
 
         var changes = await _changeDetection.DetectChangesAsync(discoveredFiles, previousFilesList, _capture, cancellationToken).ConfigureAwait(false);
+
+        var filesToUpload = changes.Count(c => c.ChangeType != FileChangeType.Unchanged);
+        progress?.Report(new BackupProgressReport(
+            TotalFilesScanned: discoveredFiles.Count,
+            FilesProcessed: 0,
+            TotalBytesScanned: totalScannedBytes,
+            BytesProcessed: 0,
+            CurrentFileName: null,
+            UploadedFilesCount: 0,
+            UnchangedFilesCount: 0,
+            StatusMessage: filesToUpload > 0
+                ? $"נמצאו {filesToUpload} קבצים חדשים/ששונו. מתחיל העלאה מוצפנת..."
+                : "כל הקבצים מעודכנים בגיבוי. מסיים..."
+        ));
 
         // 4. Initialize Monotonic Snapshot
         long nextSnapshotNumber = latestSnapshot != null ? latestSnapshot.SnapshotNumber + 1 : 1;
