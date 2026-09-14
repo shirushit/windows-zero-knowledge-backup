@@ -700,6 +700,21 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 IncludedRoots.Add(r);
             }
         }
+        else if (IncludedRoots.Count == 0)
+        {
+            if (Directory.Exists(@"C:\שירה"))
+            {
+                IncludedRoots.Add(@"C:\שירה");
+            }
+            else
+            {
+                var myDocs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                if (Directory.Exists(myDocs))
+                {
+                    IncludedRoots.Add(myDocs);
+                }
+            }
+        }
 
         // Load saved Telegram credentials if present
         var savedCreds = _credentialStoreService.LoadTelegramCredentials();
@@ -934,11 +949,21 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             var uploaded = lastReport?.UploadedFilesCount ?? 0;
             var unchanged = lastReport?.UnchangedFilesCount ?? 0;
 
-            Status = ProtectionState.Protected;
-            StatusTitle = "הגיבוי הושלם בהצלחה!";
-            StatusSubtitle = $"{scanned} קבצים נסרקו, {uploaded} קבצים חדשים הועלו, {unchanged} קבצים ללא שינוי (דולגו)";
-            ProgressSummary = StatusSubtitle;
-            LastBackupText = DateTime.Now.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
+            if (scanned == 0)
+            {
+                Status = ProtectionState.Warning;
+                StatusTitle = "לא אותרו קבצים לגיבוי";
+                StatusSubtitle = "לא נמצאו קבצים בתיקיות המוגדרות. ודאי שבלשונית 'הגדרות' מוגדרת תיקייה תקינה (כגון C:\\שירה).";
+                ProgressSummary = StatusSubtitle;
+            }
+            else
+            {
+                Status = ProtectionState.Protected;
+                StatusTitle = "הגיבוי הושלם בהצלחה!";
+                StatusSubtitle = $"{scanned} קבצים נסרקו, {uploaded} קבצים חדשים הועלו, {unchanged} קבצים ללא שינוי (דולגו)";
+                ProgressSummary = StatusSubtitle;
+                LastBackupText = DateTime.Now.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
+            }
         }
         catch (OperationCanceledException)
         {
