@@ -133,9 +133,9 @@
                             </Grid>
                         </Border>
 
-                        <!-- Live Progress Section (Visible when busy) -->
+                        <!-- Active Operation Progress Card -->
                         <Border Background="{DynamicResource AppSurfaceBrush}"
-                                BorderBrush="{DynamicResource AppAccentBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Padding="20"
@@ -143,12 +143,13 @@
                                 Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
                                 <TextBlock Text="הפעולה מתבצעת כעת..." FontWeight="Bold" FontSize="14" Foreground="{DynamicResource AppAccentBrush}"/>
-                                <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="8" Margin="0,10,0,8"/>
-                                <Grid>
-                                    <TextBlock Text="{Binding CurrentProgressItem}" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Left" TextTrimming="CharacterEllipsis" MaxWidth="400"/>
-                                    <TextBlock Text="{Binding ProgressSummary}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" HorizontalAlignment="Right"/>
-                                </Grid>
-                                <Grid Margin="0,8,0,0" Visibility="{Binding HasSpeedOrEta, Converter={StaticResource BoolToVis}}">
+                                <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="8" Margin="0,10,0,10"/>
+                                
+                                <TextBlock Text="{Binding CurrentProgressItem}" FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}" TextTrimming="CharacterEllipsis" ToolTip="{Binding CurrentProgressItem}" Margin="0,0,0,6"/>
+                                
+                                <TextBlock Text="{Binding ProgressSummary}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" Margin="0,0,0,8"/>
+
+                                <Grid Margin="0,4,0,0" Visibility="{Binding HasSpeedOrEta, Converter={StaticResource BoolToVis}}">
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                                         <TextBlock Text="⚡ מהירות: " FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
                                         <TextBlock Text="{Binding CurrentSpeedFormatted}" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource AppAccentBrush}" Margin="0,0,16,0"/>

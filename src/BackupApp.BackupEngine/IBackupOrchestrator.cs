@@ -341,6 +341,19 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
                         storageProvider,
                         catalogRepository,
                         options,
+                        onChunkProcessed: chunkBytes =>
+                        {
+                            Interlocked.Add(ref bytesProcessed, chunkBytes);
+                            progress?.Report(new BackupProgressReport(
+                                discoveredFiles.Count,
+                                filesProcessed,
+                                totalScannedBytes,
+                                Volatile.Read(ref bytesProcessed),
+                                discovered.Path.Value,
+                                uploadedFilesCount,
+                                unchangedFilesCount
+                            ));
+                        },
                         cancellationToken
                     ).ConfigureAwait(false);
 
@@ -392,7 +405,12 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
 
                 uploadedFilesCount++;
                 filesProcessed++;
-                bytesProcessed += discovered.SizeBytes;
+
+                var chunkSum = captureResult.Chunks.Sum(c => c.SizeBytes);
+                if (discovered.SizeBytes > chunkSum)
+                {
+                    Interlocked.Add(ref bytesProcessed, discovered.SizeBytes - chunkSum);
+                }
 
                 await catalogRepository.UpdateBackupJobProgressAsync(jobId, filesProcessed, bytesProcessed, cancellationToken).ConfigureAwait(false);
                 progress?.Report(new BackupProgressReport(discoveredFiles.Count, filesProcessed, totalScannedBytes, bytesProcessed, newVersion.Path.Value, uploadedFilesCount, unchangedFilesCount));
@@ -474,19 +492,22 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
         IStorageProvider storageProvider,
         ICatalogRepository catalogRepository,
         BackupEngineOptions options,
+        Action<long>? onChunkProcessed,
         CancellationToken cancellationToken)
     {
-        var readChannel = Channel.CreateBounded<RawChunkItem>(new BoundedChannelOptions(4)
+        int concurrency = Math.Max(1, options.MaxConcurrentUploads);
+
+        var readChannel = Channel.CreateBounded<RawChunkItem>(new BoundedChannelOptions(Math.Max(8, concurrency * 2))
         {
             SingleWriter = true,
             SingleReader = true,
             FullMode = BoundedChannelFullMode.Wait
         });
 
-        var uploadChannel = Channel.CreateBounded<EncryptedChunkItem>(new BoundedChannelOptions(4)
+        var uploadChannel = Channel.CreateBounded<EncryptedChunkItem>(new BoundedChannelOptions(Math.Max(8, concurrency * 2))
         {
             SingleWriter = true,
-            SingleReader = true,
+            SingleReader = false,
             FullMode = BoundedChannelFullMode.Wait
         });
 
@@ -564,8 +585,8 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
             }
         }, cancellationToken);
 
-        // Uploader Stage: Upload to storage provider and persist remote reference
-        var uploaderTask = Task.Run(async () =>
+        // Uploader Stage: Upload to storage provider and persist remote reference with concurrency
+        var uploaderTasks = Enumerable.Range(0, concurrency).Select(_ => Task.Run(async () =>
         {
             await foreach (var item in uploadChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
@@ -588,14 +609,21 @@ public sealed class BackupOrchestrator : IBackupOrchestrator
                     );
                     await catalogRepository.SaveRemoteObjectRefAsync(remoteRef, cancellationToken).ConfigureAwait(false);
 
+                    onChunkProcessed?.Invoke(item.Descriptor.SizeBytes);
+
                     if (options.ThrottleDelayMs > 0)
                     {
                         await Task.Delay(options.ThrottleDelayMs, cancellationToken).ConfigureAwait(false);
                     }
                 }
+                else
+                {
+                    // Item was already uploaded or deduplicated
+                    onChunkProcessed?.Invoke(item.Descriptor.SizeBytes);
+                }
             }
-        }, cancellationToken);
+        }, cancellationToken)).ToArray();
 
-        await Task.WhenAll(readerTask, encryptorTask, uploaderTask).ConfigureAwait(false);
+        await Task.WhenAll(new[] { readerTask, encryptorTask }.Concat(uploaderTasks)).ConfigureAwait(false);
     }
 }

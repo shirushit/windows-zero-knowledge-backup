@@ -843,6 +843,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             CurrentSpeedFormatted = string.Empty;
             EtaFormatted = string.Empty;
             var sw = System.Diagnostics.Stopwatch.StartNew();
+            var speedSamples = new Queue<(double ElapsedSec, long Bytes)>();
 
             var progressReporter = new Progress<BackupProgressReport>(report =>
             {
@@ -855,19 +856,48 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 else
                 {
                     CurrentProgressItem = PathFormatter.FormatForRtl(report.CurrentFileName);
-                    if (report.TotalFilesScanned > 0)
+                    if (report.TotalBytesScanned > 0)
                     {
-                        ProgressPercent = Math.Round((double)report.FilesProcessed / report.TotalFilesScanned * 100, 1);
+                        ProgressPercent = Math.Clamp(Math.Round((double)report.BytesProcessed / report.TotalBytesScanned * 100, 1), 0, 100);
                     }
-                    ProgressSummary = $"{report.FilesProcessed} מתוך {report.TotalFilesScanned} קבצים ({PathFormatter.FormatBytes(report.BytesProcessed)})";
-
-                    var elapsedSec = sw.Elapsed.TotalSeconds;
-                    if (elapsedSec > 0.5 && report.BytesProcessed > 0)
+                    else if (report.TotalFilesScanned > 0)
                     {
-                        var speedBytesPerSec = report.BytesProcessed / elapsedSec;
+                        ProgressPercent = Math.Clamp(Math.Round((double)report.FilesProcessed / report.TotalFilesScanned * 100, 1), 0, 100);
+                    }
+
+                    ProgressSummary = $"{report.FilesProcessed} מתוך {report.TotalFilesScanned} קבצים | {PathFormatter.FormatBytes(report.BytesProcessed)} מתוך {PathFormatter.FormatBytes(report.TotalBytesScanned)} ({ProgressPercent}%)";
+
+                    var nowSec = sw.Elapsed.TotalSeconds;
+                    speedSamples.Enqueue((nowSec, report.BytesProcessed));
+
+                    // Keep rolling window of the last 15 seconds
+                    while (speedSamples.Count > 1 && (nowSec - speedSamples.Peek().ElapsedSec) > 15.0)
+                    {
+                        speedSamples.Dequeue();
+                    }
+
+                    double speedBytesPerSec = 0;
+                    if (speedSamples.Count >= 2)
+                    {
+                        var oldest = speedSamples.Peek();
+                        var deltaSec = nowSec - oldest.ElapsedSec;
+                        var deltaBytes = report.BytesProcessed - oldest.Bytes;
+                        if (deltaSec > 0.5 && deltaBytes > 0)
+                        {
+                            speedBytesPerSec = deltaBytes / deltaSec;
+                        }
+                    }
+
+                    if (speedBytesPerSec <= 0 && nowSec > 1.0 && report.BytesProcessed > 0)
+                    {
+                        speedBytesPerSec = report.BytesProcessed / nowSec;
+                    }
+
+                    if (speedBytesPerSec > 0)
+                    {
                         CurrentSpeedFormatted = PathFormatter.FormatBytes((long)speedBytesPerSec) + "/s";
                         var remainingBytes = Math.Max(0, report.TotalBytesScanned - report.BytesProcessed);
-                        if (speedBytesPerSec > 0 && remainingBytes > 0)
+                        if (remainingBytes > 0)
                         {
                             var etaSec = (int)(remainingBytes / speedBytesPerSec);
                             var timeSpan = TimeSpan.FromSeconds(etaSec);
@@ -877,8 +907,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                         }
                         else
                         {
-                            EtaFormatted = "מחשב...";
+                            EtaFormatted = "מסיים...";
                         }
+                    }
+                    else
+                    {
+                        EtaFormatted = "מחשב...";
                     }
                 }
             });

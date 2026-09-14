@@ -50,12 +50,14 @@ public sealed class TokenBucketRateLimiter : IDisposable
 
     public async Task WaitForTokenAsync(Action<string>? statusCallback = null, CancellationToken cancellationToken = default)
     {
-        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        while (true)
         {
-            while (true)
+            cancellationToken.ThrowIfCancellationRequested();
+            double waitSeconds = 0;
+
+            await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
                 var now = DateTimeOffset.UtcNow;
                 var elapsedSeconds = (now - _lastRefillUtc).TotalSeconds;
                 if (elapsedSeconds > 0)
@@ -71,20 +73,20 @@ public sealed class TokenBucketRateLimiter : IDisposable
                 }
 
                 var needed = 1.0 - _currentTokens;
-                var waitSeconds = Math.Max(1.0, needed / _refillRatePerSecond);
-                var totalWaitSec = (int)Math.Ceiling(waitSeconds);
-
-                for (int s = totalWaitSec; s > 0; s--)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    statusCallback?.Invoke($"ממתין להפשרת קצב מטלגרם ({s} שניות)...");
-                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-                }
+                waitSeconds = Math.Max(0.5, needed / _refillRatePerSecond);
             }
-        }
-        finally
-        {
-            _semaphore.Release();
+            finally
+            {
+                _semaphore.Release();
+            }
+
+            var totalWaitSec = (int)Math.Ceiling(waitSeconds);
+            for (int s = totalWaitSec; s > 0; s--)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                statusCallback?.Invoke($"ממתין להפשרת קצב מטלגרם ({s} שניות)...");
+                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 

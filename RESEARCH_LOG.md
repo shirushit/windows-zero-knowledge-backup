@@ -523,3 +523,24 @@ Security review: Zero-knowledge invariants and cryptographic integrity intact; c
 Problems: None.
 Decisions: Skip rename matching when no deleted files exist; filter candidate files by exact byte size before computing hash.
 Next: Relaunch on interactive desktop and provide Hebrew explanation to user.
+
+### 2026-09-14 03:20 +03:00 — High-Throughput Concurrent Uploads, Real-Time Chunk Progress & Smooth Rolling-Window ETA
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: main
+Commit: pending
+Plan item: High-speed backup execution, chunk-level real-time progress, and robust ETA/speed calculation
+Completed:
+- Enabled concurrent chunk uploading in `IBackupOrchestrator.cs` via `Task.Run` worker pool governed by `options.MaxConcurrentUploads` with `SingleReader = false` on `uploadChannel`.
+- Implemented `onChunkProcessed` streaming callback in `ProcessChunksPipelineAsync` and `RunBackupAsync`: `bytesProcessed` is updated and reported to UI on every individual chunk (32MB) and deduplicated chunk immediately.
+- Hardened `TokenBucketRateLimiter` in `TelegramUploader.cs`: released semaphore lock prior to wait delay to prevent worker starvation.
+- Updated `MainViewModel.cs` progress calculation: `ProgressPercent` is now byte-based (`BytesProcessed / TotalBytesScanned`), moving continuously with every chunk.
+- Implemented rolling 15-second window for speed calculation (`speedSamples`) in `MainViewModel.cs`, delivering rock-solid live speed and eliminating wild ETA jumps.
+- Re-architected active operation card in `MainWindow.xaml`: placed `CurrentProgressItem` and `ProgressSummary` in separate vertical rows, completely resolving RTL text collision.
+- Verified 100% test pass rate across all 159 tests in test suites.
+- Built self-contained Release package and updated desktop launcher at `C:\Users\owner\Desktop\BackupApp-Launcher\BackupApp.exe`.
+Changed: src/BackupApp.BackupEngine/IBackupOrchestrator.cs, src/BackupApp.Storage.Telegram/TelegramUploader.cs, src/BackupApp.UI/MainWindow.xaml, src/BackupApp.UI/ViewModels/MainViewModel.cs, RESEARCH_LOG.md.
+Tests/build: 159/159 tests passed; `dotnet build` succeeded; `build-release.ps1` succeeded.
+Security review: Zero-knowledge invariants preserved; concurrent uploads maintain individual AEAD authentication tags and independent ephemeral nonces.
+Problems: None.
+Decisions: Use 15-second rolling window for live throughput estimation; maintain byte-based progress percentage for granular feedback on large video assets.
+Next: Commit to Git, push to GitHub, launch on interactive desktop, and report to user.
