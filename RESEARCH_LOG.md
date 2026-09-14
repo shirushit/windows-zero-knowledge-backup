@@ -544,3 +544,23 @@ Security review: Zero-knowledge invariants preserved; concurrent uploads maintai
 Problems: None.
 Decisions: Use 15-second rolling window for live throughput estimation; maintain byte-based progress percentage for granular feedback on large video assets.
 Next: Commit to Git, push to GitHub, launch on interactive desktop, and report to user.
+
+### 2026-09-14 04:39 +03:00 — Fix: Remote Object Index Persistence, DPAPI MasterKey Storage & Robust File Opening
+Agent/model: Gemini 3.8 Flash (Antigravity)
+Branch: main
+Commit: pending
+Plan item: Fix Tab 2 File Opening, Remote Object Retrieval, and Key Persistence
+Completed:
+- Added `RemoteIdentifierResolver` in `TelegramStorageAdapter` enabling on-demand resolution and retrieval of remote objects directly from SQLite `remote_object_refs`, plus catalog index warmup during startup.
+- Implemented Windows DPAPI persistent `MasterKey` storage (`masterkey.dat`) in `CredentialStoreService` so the same master key is preserved across application restarts and sessions.
+- Enhanced `WindowsProcessLauncher` with automatic fallback to `notepad.exe` for unassociated source/code extensions (`.c`, `.h`, `.asm`, `.as`, `.am`, etc.) and Explorer selection fallback.
+- Enhanced `MainViewModel.OpenSelectedFileAsync` with dual-mode opening: decrypts remote backup to `%TEMP%\BackupAppPreview` and falls back seamlessly to the local original if remote is offline or key mismatch occurs.
+- Added `ListRemoteObjectRefsAsync` in `ICatalogRepository` and `SqliteCatalogRepository`.
+- Added automated unit tests across `CatalogRepositoryTests`, `TelegramStorageTests`, and `CredentialStoreServiceTests` with 163/163 (100%) test pass rate.
+- Built self-contained Release package, updated launcher, and launched on interactive desktop.
+Changed: src/BackupApp.Catalog/ICatalogRepository.cs, src/BackupApp.Catalog/SqliteCatalogRepository.cs, src/BackupApp.Storage.Telegram/TelegramStorageAdapter.cs, src/BackupApp.UI/Services/CredentialStoreService.cs, src/BackupApp.UI/Services/WindowsProcessLauncher.cs, src/BackupApp.UI/ViewModels/MainViewModel.cs, tests/BackupApp.UnitTests/CatalogRepositoryTests.cs, tests/BackupApp.UnitTests/CredentialStoreServiceTests.cs, tests/BackupApp.UnitTests/TelegramStorageTests.cs, RESEARCH_LOG.md.
+Tests/build: 163/163 tests passed (100%); `dotnet build BackupApp.sln -c Release` succeeded (0 warnings, 0 errors); `dotnet format --verify-no-changes` clean; `build-release.ps1` succeeded.
+Security review: Zero-knowledge encryption strictly maintained; local MasterKey encrypted with DPAPI CurrentUser; temporary decrypted preview files authenticated via AEAD before launch.
+Problems: Disambiguated `ICredentialStorage` reference in `CredentialStoreService`.
+Decisions: Use DPAPI for seamless local MasterKey persistence; fallback to Notepad for code files lacking default Windows file associations.
+Next: Monitor interactive session and confirm user satisfaction.

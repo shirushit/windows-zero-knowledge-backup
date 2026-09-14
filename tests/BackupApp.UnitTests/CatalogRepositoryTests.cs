@@ -275,4 +275,27 @@ public class CatalogRepositoryTests : IAsyncDisposable
         versions[1].SizeBytes.Should().Be(100);
         versions[1].ChunkRefs.Should().ContainSingle().Which.Should().Be(chunk1);
     }
+
+    [Fact]
+    public async Task ListRemoteObjectRefsAsync_ShouldReturnSavedRefsForProvider()
+    {
+        await _repo.InitializeAsync();
+
+        var obj1 = ObjectId.FromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var obj2 = ObjectId.FromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+        var ref1 = new RemoteObjectRef(obj1, "telegram", "tg:101:file_abc", DateTimeOffset.UtcNow, true);
+        var ref2 = new RemoteObjectRef(obj2, "telegram", "tg:102:file_def", DateTimeOffset.UtcNow, true);
+        var refOther = new RemoteObjectRef(obj1, "other_provider", "other_123", DateTimeOffset.UtcNow, true);
+
+        await _repo.SaveRemoteObjectRefAsync(ref1);
+        await _repo.SaveRemoteObjectRefAsync(ref2);
+        await _repo.SaveRemoteObjectRefAsync(refOther);
+
+        var telegramRefs = await _repo.ListRemoteObjectRefsAsync("telegram");
+
+        telegramRefs.Should().HaveCount(2);
+        telegramRefs.Should().Contain(r => r.ObjectId == obj1 && r.RemoteIdentifier == "tg:101:file_abc");
+        telegramRefs.Should().Contain(r => r.ObjectId == obj2 && r.RemoteIdentifier == "tg:102:file_def");
+    }
 }

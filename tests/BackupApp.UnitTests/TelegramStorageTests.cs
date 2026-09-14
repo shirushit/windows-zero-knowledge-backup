@@ -49,6 +49,43 @@ public class TelegramStorageTests
     }
 
     [Fact]
+    public async Task TelegramStorageAdapter_WithRemoteIdentifierResolver_ShouldDownloadUnregisteredObject()
+    {
+        var testData = Encoding.UTF8.GetBytes("Resolved remote chunk binary payload");
+        var mockHandler = new MockTelegramHttpMessageHandler(testData);
+        var httpClient = new HttpClient(mockHandler);
+
+        var config = new TelegramStorageConfiguration("test_bot_token", "test_chat_id", "https://api.telegram.mock");
+        var adapter = new TelegramStorageAdapter(config, httpClient);
+
+        var id = ObjectId.FromHex("4444444444444444444444444444444444444444444444444444444444444444");
+
+        // Object is not registered in adapter._objectIndex
+        var existsInitially = await adapter.ExistsAsync(id);
+        existsInitially.Should().BeFalse();
+
+        // Configure RemoteIdentifierResolver
+        adapter.RemoteIdentifierResolver = objId =>
+        {
+            if (objId == id)
+            {
+                return Task.FromResult<string?>("tg:99:file_id_mock_123");
+            }
+            return Task.FromResult<string?>(null);
+        };
+
+        // Now ExistsAsync and GetObjectAsync should resolve via RemoteIdentifierResolver
+        var existsAfter = await adapter.ExistsAsync(id);
+        existsAfter.Should().BeTrue();
+
+        using var downloadedStream = await adapter.GetObjectAsync(id);
+        using var memory = new MemoryStream();
+        await downloadedStream.CopyToAsync(memory);
+
+        memory.ToArray().Should().BeEquivalentTo(testData);
+    }
+
+    [Fact]
     public async Task TelegramStorageAdapter_InvalidToken_ShouldThrowProviderAuthenticationException()
     {
         var mockHandler = new MockTelegramHttpMessageHandler([], simulateAuthError: true);

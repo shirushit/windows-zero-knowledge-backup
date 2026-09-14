@@ -633,6 +633,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _processLauncher = processLauncher ?? new WindowsProcessLauncher();
         _scheduler = scheduler ?? new BackupScheduler();
 
+        ConfigureTelegramStorageProvider(_storageProvider);
+
         _scheduler.BackupTriggered += async () =>
         {
             if (!IsBusy)
@@ -724,13 +726,19 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             TelegramChatId = savedCreds.ChatId;
             var config = new TelegramStorageConfiguration(savedCreds.BotToken, savedCreds.ChatId);
             _storageProvider = _storageFactory(config);
+            ConfigureTelegramStorageProvider(_storageProvider);
             SettingsStatusMessage = "פרטי החיבור לטלגרם נטענו בהצלחה.";
         }
 
-        // Ensure master key is initialized
+        // Ensure master key is initialized and persisted via Windows DPAPI
         if (_unlockedMasterKey == null)
         {
-            _unlockedMasterKey = MasterKey.Generate();
+            _unlockedMasterKey = _credentialStoreService.LoadMasterKey();
+            if (_unlockedMasterKey == null)
+            {
+                _unlockedMasterKey = MasterKey.Generate();
+                _credentialStoreService.SaveMasterKey(_unlockedMasterKey);
+            }
         }
 
         // Load backed-up files from catalog or remote discovery
@@ -781,6 +789,29 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 {
                     SetCurrentManifest(manifests[0]);
                     LastBackupText = manifests[0].CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
+                }
+            }
+
+            if (_storageProvider is TelegramStorageAdapter telegramAdapter)
+            {
+                try
+                {
+                    var remoteRefs = await _catalogRepository.ListRemoteObjectRefsAsync("telegram", cancellationToken).ConfigureAwait(true);
+                    foreach (var rRef in remoteRefs)
+                    {
+                        if (rRef.RemoteIdentifier.StartsWith("tg:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var parts = rRef.RemoteIdentifier.Split(':', 3);
+                            if (parts.Length == 3 && long.TryParse(parts[1], CultureInfo.InvariantCulture, out var msgId))
+                            {
+                                telegramAdapter.RegisterKnownObject(rRef.ObjectId, parts[2], msgId, 0, string.Empty);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Non-fatal index warmup
                 }
             }
         }
@@ -836,7 +867,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         try
         {
-            _unlockedMasterKey ??= MasterKey.Generate();
+            if (_unlockedMasterKey == null)
+            {
+                _unlockedMasterKey = _credentialStoreService.LoadMasterKey();
+                if (_unlockedMasterKey == null)
+                {
+                    _unlockedMasterKey = MasterKey.Generate();
+                    _credentialStoreService.SaveMasterKey(_unlockedMasterKey);
+                }
+            }
 
             var backupSets = await _catalogRepository.ListBackupSetsAsync(_currentCts.Token).ConfigureAwait(true);
             var backupSet = backupSets.FirstOrDefault(b => b.Name == "DefaultBackupSet");
@@ -1227,10 +1266,42 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private void ConfigureTelegramStorageProvider(IStorageProvider provider)
+    {
+        if (provider is TelegramStorageAdapter telegramAdapter)
+        {
+            telegramAdapter.RemoteIdentifierResolver = async id =>
+            {
+                var remoteRef = await _catalogRepository.GetRemoteObjectRefAsync(id, "telegram").ConfigureAwait(false);
+                return remoteRef?.RemoteIdentifier;
+            };
+        }
+    }
+
+    private string? FindLocalFile(string relativePath)
+    {
+        var normalized = relativePath.Replace('/', Path.DirectorySeparatorChar);
+        if (File.Exists(normalized))
+        {
+            return normalized;
+        }
+
+        foreach (var root in IncludedRoots)
+        {
+            var candidate = Path.Combine(root, normalized);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
     public async Task OpenSelectedFileAsync(object? parameter = null)
     {
         var fileItem = parameter as FileItemViewModel ?? SelectedFile;
-        if (fileItem == null || _latestManifest == null || _unlockedMasterKey == null)
+        if (fileItem == null)
         {
             return;
         }
@@ -1238,7 +1309,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         IsBusy = true;
         Status = ProtectionState.Restoring;
         StatusTitle = "משחזר קובץ לצפייה...";
-        StatusSubtitle = $"מפענח את {fileItem.FormattedPath}";
+        StatusSubtitle = $"פותח את {fileItem.FormattedPath}";
         ProgressPercent = 0;
 
         try
@@ -1249,35 +1320,78 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 Directory.CreateDirectory(previewDir);
             }
 
-            var options = new RestoreOptions(
-                DestinationRootPath: previewDir,
-                ConflictResolution: RestoreConflictResolution.Overwrite,
-                RestoreTimestamps: true
-            );
-
-            var progressReporter = new Progress<RestoreProgressReport>(report =>
-            {
-                CurrentProgressItem = PathFormatter.FormatForRtl(report.CurrentFileName);
-                var phaseText = string.IsNullOrEmpty(report.CurrentPhase) ? string.Empty : $" [{report.CurrentPhase}]";
-                ProgressSummary = $"{phaseText}";
-            });
-
-            await _restoreOrchestrator.RestoreFileAsync(
-                _latestManifest,
-                fileItem.RelativePath,
-                _unlockedMasterKey,
-                _storageProvider,
-                options,
-                progress: progressReporter
-            ).ConfigureAwait(true);
-
             var targetPath = RestoreOrchestrator.ValidateAndResolveTargetPath(previewDir, fileItem.RelativePath);
+            bool fileReady = false;
 
-            Status = ProtectionState.Protected;
-            StatusTitle = "הקובץ שוחזר ונפתח!";
-            StatusSubtitle = targetPath;
+            if (_latestManifest != null && _unlockedMasterKey != null)
+            {
+                var options = new RestoreOptions(
+                    DestinationRootPath: previewDir,
+                    ConflictResolution: RestoreConflictResolution.Overwrite,
+                    RestoreTimestamps: true
+                );
 
-            _processLauncher.Start(targetPath);
+                var progressReporter = new Progress<RestoreProgressReport>(report =>
+                {
+                    CurrentProgressItem = PathFormatter.FormatForRtl(report.CurrentFileName);
+                    var phaseText = string.IsNullOrEmpty(report.CurrentPhase) ? string.Empty : $" [{report.CurrentPhase}]";
+                    ProgressSummary = $"{phaseText}";
+                });
+
+                try
+                {
+                    await _restoreOrchestrator.RestoreFileAsync(
+                        _latestManifest,
+                        fileItem.RelativePath,
+                        _unlockedMasterKey,
+                        _storageProvider,
+                        options,
+                        progress: progressReporter
+                    ).ConfigureAwait(true);
+
+                    fileReady = File.Exists(targetPath);
+                }
+                catch (Exception)
+                {
+                    // Fallback to local copy if restore fails
+                    var localPath = FindLocalFile(fileItem.RelativePath);
+                    if (localPath != null && File.Exists(localPath))
+                    {
+                        targetPath = localPath;
+                        fileReady = true;
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+            }
+            else
+            {
+                var localPath = FindLocalFile(fileItem.RelativePath);
+                if (localPath != null && File.Exists(localPath))
+                {
+                    targetPath = localPath;
+                    fileReady = true;
+                }
+                else
+                {
+                    throw new InvalidOperationException("נתוני הגיבוי אינם זמינים כעת ולא נמצא עותק מקומי של הקובץ.");
+                }
+            }
+
+            if (fileReady && File.Exists(targetPath))
+            {
+                Status = ProtectionState.Protected;
+                StatusTitle = "הקובץ נפתח בהצלחה!";
+                StatusSubtitle = targetPath;
+
+                _processLauncher.Start(targetPath);
+            }
+            else
+            {
+                throw new FileNotFoundException($"לא ניתן היה לאתר או לשחזר את הקובץ: {fileItem.FormattedPath}");
+            }
         }
         catch (Exception ex)
         {
@@ -1680,6 +1794,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             }
 
             _storageProvider = provider;
+            ConfigureTelegramStorageProvider(_storageProvider);
             _credentialStoreService.SaveTelegramCredentials(new TelegramCredentials(TelegramBotToken.Trim(), TelegramChatId.Trim()));
 
             SettingsStatusMessage = "חיבור טלגרם אומת בהצלחה והוגדר כאחסון הראשי!";
