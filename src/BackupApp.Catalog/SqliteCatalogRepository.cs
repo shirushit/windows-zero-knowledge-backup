@@ -673,6 +673,29 @@ public sealed class SqliteCatalogRepository : ICatalogRepository
         );
     }
 
+    public async Task<IReadOnlyList<RemoteObjectRef>> ListRemoteObjectRefsAsync(string providerId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT object_id, provider_id, remote_identifier, uploaded_at, is_verified FROM remote_object_refs WHERE provider_id = @provId;";
+        command.Parameters.AddWithValue("@provId", providerId);
+
+        var list = new List<RemoteObjectRef>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            list.Add(new RemoteObjectRef(
+                ObjectId.FromHex(reader.GetString(0)),
+                reader.GetString(1),
+                reader.GetString(2),
+                DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture),
+                reader.GetInt32(4) == 1
+            ));
+        }
+
+        return list;
+    }
+
     public async Task SaveBackupJobAsync(BackupJob job, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);

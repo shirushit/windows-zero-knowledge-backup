@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using BackupApp.Crypto;
 using BackupApp.Platform.Windows;
 using BackupApp.UI.Services;
 using FluentAssertions;
@@ -92,5 +93,32 @@ public class CredentialStoreServiceTests : IDisposable
         var service = new CredentialStoreService(_credentialsPath);
         var act = () => service.SaveTelegramCredentials(null!);
         act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void SaveAndLoadMasterKey_ShouldRoundTripCorrectly()
+    {
+        var service = new CredentialStoreService(_credentialsPath);
+        using var originalKey = MasterKey.Generate();
+        var rawOriginal = originalKey.ExportRawKey();
+
+        service.SaveMasterKey(originalKey);
+
+        using var loadedKey = service.LoadMasterKey();
+        loadedKey.Should().NotBeNull();
+        loadedKey!.ExportRawKey().Should().BeEquivalentTo(rawOriginal);
+    }
+
+    [Fact]
+    public void ClearMasterKey_ShouldDeleteMasterKeyFile()
+    {
+        var service = new CredentialStoreService(_credentialsPath);
+        using var originalKey = MasterKey.Generate();
+
+        service.SaveMasterKey(originalKey);
+        service.LoadMasterKey().Should().NotBeNull();
+
+        service.ClearMasterKey();
+        service.LoadMasterKey().Should().BeNull();
     }
 }

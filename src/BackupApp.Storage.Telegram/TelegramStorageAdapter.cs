@@ -27,6 +27,8 @@ public sealed class TelegramStorageAdapter : IStorageProvider, IRateLimitedStora
         set => _uploader.OnRateLimitDelay = value;
     }
 
+    public Func<ObjectId, Task<string?>>? RemoteIdentifierResolver { get; set; }
+
     public TelegramStorageAdapter(
         TelegramStorageConfiguration config,
         HttpClient? httpClient = null,
@@ -103,12 +105,55 @@ public sealed class TelegramStorageAdapter : IStorageProvider, IRateLimitedStora
         );
     }
 
+    private async Task<(string FileId, long MessageId, long SizeBytes, string HashSha256, DateTimeOffset UploadedAt)?> TryResolveObjectAsync(ObjectId id)
+    {
+        if (_objectIndex.TryGetValue(id.Value, out var info))
+        {
+            return info;
+        }
+
+        if (RemoteIdentifierResolver != null)
+        {
+            var identifier = await RemoteIdentifierResolver(id).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(identifier))
+            {
+                var fileId = identifier;
+                long messageId = 0;
+                if (identifier.StartsWith("tg:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var parts = identifier.Split(':', 3);
+                    if (parts.Length == 3)
+                    {
+                        long.TryParse(parts[1], CultureInfo.InvariantCulture, out messageId);
+                        fileId = parts[2];
+                    }
+                }
+
+                var entry = (fileId, messageId, 0L, string.Empty, DateTimeOffset.UtcNow);
+                _objectIndex[id.Value] = entry;
+                lock (_lock)
+                {
+                    if (!_manifestAnchors.Contains(id) && id.Value.Contains("manifest", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _manifestAnchors.Add(id);
+                    }
+                }
+                return entry;
+            }
+        }
+
+        return null;
+    }
+
     public async Task<Stream> GetObjectAsync(ObjectId id, CancellationToken cancellationToken = default)
     {
-        if (!_objectIndex.TryGetValue(id.Value, out var info))
+        var resolved = await TryResolveObjectAsync(id).ConfigureAwait(false);
+        if (resolved == null || string.IsNullOrEmpty(resolved.Value.FileId))
         {
             throw new KeyNotFoundException($"Remote object '{id.Value}' has not been registered in Telegram index.");
         }
+
+        var info = resolved.Value;
 
         return await _retryPolicy.ExecuteWithRetryAsync(async ct =>
         {
@@ -168,16 +213,26 @@ public sealed class TelegramStorageAdapter : IStorageProvider, IRateLimitedStora
         }, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    public Task<bool> ExistsAsync(ObjectId id, CancellationToken cancellationToken = default)
+    public async Task<bool> ExistsAsync(ObjectId id, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(_objectIndex.ContainsKey(id.Value));
+        if (_objectIndex.ContainsKey(id.Value))
+        {
+            return true;
+        }
+
+        var resolved = await TryResolveObjectAsync(id).ConfigureAwait(false);
+        return resolved != null && !string.IsNullOrEmpty(resolved.Value.FileId);
     }
 
     public async Task<bool> DeleteAsync(ObjectId id, CancellationToken cancellationToken = default)
     {
         if (!_objectIndex.TryRemove(id.Value, out var info))
         {
-            return false;
+            var resolved = await TryResolveObjectAsync(id).ConfigureAwait(false);
+            if (resolved == null || !_objectIndex.TryRemove(id.Value, out info))
+            {
+                return false;
+            }
         }
 
         lock (_lock)

@@ -35,6 +35,7 @@ public interface ICatalogRepository : IAsyncDisposable
     Task<StoredChunk?> GetChunkAsync(ObjectId id, CancellationToken cancellationToken = default);
     Task SaveRemoteObjectRefAsync(RemoteObjectRef remoteRef, CancellationToken cancellationToken = default);
     Task<RemoteObjectRef?> GetRemoteObjectRefAsync(ObjectId objectId, string providerId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RemoteObjectRef>> ListRemoteObjectRefsAsync(string providerId, CancellationToken cancellationToken = default);
 
     // Jobs
     Task SaveBackupJobAsync(BackupJob job, CancellationToken cancellationToken = default);
